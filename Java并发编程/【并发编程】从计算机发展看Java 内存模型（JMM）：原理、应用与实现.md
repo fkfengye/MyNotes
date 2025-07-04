@@ -56,4 +56,227 @@
 #### 2.2.1 MESI协议工作流程
 ![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/2dc31c385a4f4aeab378ea3c6c95269c.png)
 ![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/f60f755cabea43f9a0e8e0f9d1e0bdc6.png)
-**`下载后浏览器打开实际操作一下`**：[MESI协议工作原理详解.html](https://whs3hb2rbo.feishu.cn/docx/F36id5pgeoZYwNxrxVmcNy9jn56#share-AKaEd1ptho9PgyxYTsUckv65npd)
+**`下载后浏览器打开实际操作一下`**：[MESI协议工作原理详解.html](https://github.com/fkfengye/MyNotes/blob/main/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/file/MESI%E5%8D%8F%E8%AE%AE%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86%E8%AF%A6%E8%A7%A3.html)
+
+
+#### 2.2.2 总线监听架构（Bus Snooping）
+
+MESI 协议基于总线监听机制，每个 CPU 核心通过侦听系统总线（如 `FSB`、`QPI`）获取其他核心的缓存操作信息。当某核心修改缓存行时，需通过总线广播 Invalidate 消息，其他核心通过解析总线事务（如地址、控制信号）判断自身缓存行是否需要失效，该机制要求总线具备高带宽和低延迟特性。
+![\[图片\]](https://i-blog.csdnimg.cn/direct/ed15dda59f364e66963cb539e2d58712.png)
+**`下载后浏览器打开`**：[MESI协议总线监听机制流程图.html](https://github.com/fkfengye/MyNotes/blob/main/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/file/MESI%E5%8D%8F%E8%AE%AE%E6%80%BB%E7%BA%BF%E7%9B%91%E5%90%AC%E6%9C%BA%E5%88%B6%E6%B5%81%E7%A8%8B%E5%9B%BE.html)
+
+
+#### 2.2.3 状态机与状态转换逻辑
+
+MESI 协议本质是一个四状态有限状态机（FSM），其状态转换存在严格的原子性约束：
+- **从 Shared 到 Modified**：需完成三个原子操作：① 发送 Invalidate 请求；② 等待所有核心响应 Invalidate Ack；③ 更改本地缓存行状态。任何一个步骤失败都会导致操作回滚。
+- **Modified 状态的写回触发条件**：不仅包括缓存行替换，还涉及处理器进入低功耗状态、执行内存屏障指令等特殊场景，此时需通过总线事务将数据原子写入主存。
+
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/a01ed77d44b94daf9fe5642df50139ef.png)
+
+#### 2.2.4 缓存行标签与一致性元数据
+
+缓存行是 CPU 缓存与主存之间数据交换的最小单位，类似于 “**数据运输的集装箱**”。当 CPU 需要访问主存中的某个字节时，会以该字节为中心，将相邻的一组数据（通常 64~128 字节）整体加载到缓存中
+
+每个缓存行的标签（`Tag`）除存储物理地址外，还包含 MESI 状态位（`2` 位即可表示 `4` 种状态）、修改标志位（脏位）等元数据。现代处理器通过硬件电路（如比较器、状态寄存器）快速判断状态转换条件，例如 `Intel Sandy Bridge` 架构采用专用的缓存一致性控制器（`Coherence Control Unit`）加速状态机运算。
+
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/b867fcb7e9f041d4a6e55a8d1726887b.png)
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/c1134acdd0b748a7800eab2f29a9bcf1.png)
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/a88ec695307f47b59cc870045dfe5080.png)
+**`下载后浏览器打开`**：[CPU缓存行结构详解.html](https://github.com/fkfengye/MyNotes/blob/main/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/file/CPU%E7%BC%93%E5%AD%98%E8%A1%8C%E7%BB%93%E6%9E%84%E8%AF%A6%E8%A7%A3.html)
+
+.
+### 2.3 MESI 协议在不同架构中的应用差异
+
+虽然 `MESI 协议`广泛应用于多核处理器，但在不同硬件架构中，其实现细节存在差异。例如，`ARM` 架构的处理器在处理缓存一致性时，部分场景下会采用与英特尔不同的优化策略。`ARM` 通过 `AMBA`（`Advanced Microcontroller Bus Architecture`）总线协议来实现缓存一致性，在一些低功耗设备中，为了减少总线通信开销，会对 MESI 协议的状态转换进行特殊优化 。了解这些差异，有助于 Java 开发者在不同硬件环境下更好地评估程序性能。
+
+**`下载后浏览器打开`**：[MESI协议在不同架构中的应用差异.html](https://github.com/fkfengye/MyNotes/blob/main/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/file/MESI%E5%8D%8F%E8%AE%AE%E5%9C%A8%E4%B8%8D%E5%90%8C%E6%9E%B6%E6%9E%84%E4%B8%AD%E7%9A%84%E5%BA%94%E7%94%A8%E5%B7%AE%E5%BC%82.html)
+
+.
+### 2.4 MESI 协议的优势与局限性
+
+`MESI 协议`通过高效的状态管理和消息传递机制，有效地解决了多核处理器中的缓存一致性问题，在一定程度上保障了多线程程序中数据的一致性。
+
+然而，它也存在一些局限性。首先，`MESI 协议`的实现依赖于总线通信，当多个核心频繁地进行数据修改和同步时，会产生大量的总线事务，导致总线带宽成为性能瓶颈。其次，为了确保指令执行顺序的正确性，处理器需要插入`内存屏障（Memory Barrier`），这会带来一定的性能开销。此外，MESI 协议还存在`伪共享（False Sharing）`问题，即当多个无关变量被存储在同一个缓存行中时，即使这些变量被不同核心独立修改，也会导致缓存行频繁失效，从而降低系统性能。
+
+
+.
+.
+## 三、Java 内存模型（JMM）的诞生：软件层面的应对策略
+
+### 3.1 Java 早期内存模型的不足
+
+Java 语言自 1995 年诞生以来，其 “`一次编写，到处运行`” 的特性深受开发者喜爱。在 Java 发展的早期阶段，多线程编程主要依赖于`synchronized`关键字和`Object`类的`wait()/notify()`方法来实现同步和通信。然而，当时的 Java 内存模型存在诸多缺陷，在多核环境下无法保证多线程程序的正确性和可靠性。
+
+早期 Java 内存模型对指令重排序缺乏有效的约束，编译器和处理器为了优化性能，可能会对程序中的指令进行重排序，导致多线程程序出现不可预测的行为。此外，对于共享变量的可见性问题，早期 Java 内存模型也没有明确的规定，一个线程对共享变量的修改可能无法及时被其他线程感知到，从而引发数据不一致问题 。
+
+#### 3.1.1 指令重排序的无约束性
+
+早期 JMM 未定义 “有序性” 规则，允许编译器和处理器进行激进优化。例如：
+
+```java
+// 早期JMM下可能的指令重排序场景
+int a = 0, b = 0;
+Thread A: a = 1; b = 2;
+Thread B: if (b == 2) print(a);  // 可能输出0，因a=1和b=2可重排
+```
+这种重排源于早期 JMM 未限制编译器生成与源代码顺序不一致的指令序列。在 x86 架构中，处理器通过 `Store Buffer` 优化写操作，但若缺乏内存屏障，其他核心可能观察到乱序的内存操作。
+
+#### 3.1.2 可见性保证的模糊性
+
+早期 JMM 对共享变量的同步规则定义模糊，导致：
+
+```java
+// 可见性问题典型案例
+int count = 0;
+boolean running = true;
+
+// 线程A: 计数到100
+while (running) {
+    if (count < 100) count++;
+}
+
+// 线程B: 终止计数
+running = false;
+count = 200;
+```
+
+线程 B 对`running`和`count`的修改可能长期驻留在本地 CPU 缓存中，线程 A 无法及时感知。这是因为早期 JMM 未强制要求缓存刷新，依赖硬件默认行为（如 `MESI 协议的被动同步`），而不同架构的同步时机差异显著。
+
+#### 3.1.3 跨平台语义不一致
+
+早期 JMM 在不同硬件架构上表现迥异：
+- x86 的 `TSO`（`Total Store Order`）内存模型对写操作有较强顺序保证；
+- SPARC 的 `PSO`（`Partial Store Order`）允许更多写重排，导致相同 Java 代码在不同平台行为不一致。
+
+.
+### 3.2 现代 Java 内存模型的规范与目标
+
+为了解决早期 Java 内存模型存在的问题，Java 社区在 2004 年发布的 JDK 5 中引入了全新的 Java 内存模型（`Java Memory Model，JMM`），由 JSR - 133 规范定义。
+
+现代 Java 内存模型的主要目标是提供跨平台的一致性，确保 Java 程序在不同硬件架构上具有相同的行为；保证线程间共享变量的可见性，使一个线程对共享变量的修改能够及时被其他线程看到；同时，在保证程序正确性的前提下，允许编译器和处理器进行合理的性能优化。
+
+Java 内存模型通过定义一系列的规则和概念来实现这些目标，其中最重要的是 `happens - before` 关系。`happens - before` 关系并不是指操作在时间上的先后顺序，而是定义了一种操作之间的偏序关系。如果操作 A `happens - before` 操作 B，那么操作 A 的结果对操作 B 可见，并且操作 A 在内存中的写操作会按照 `happens - before` 关系的顺序对操作 B 可见。
+
+
+#### 3.2.1 happens-before 的形式化语义
+
+`happens-before` 是一种偏序关系，定义为：若操作 A `happens-before` 操作 B，则 A 的内存效应（写值）对 B 可见。其数学表达为：
+
+```java
+happensBefore(A, B) ≡ programOrder(A) ∨ monitorOrder(A, B) ∨ 
+                    volatileOrder(A, B) ∨ threadOrder(A, B) ∨ 
+                    (∃C: happensBefore(A, C) ∧ happensBefore(C, B))
+```
+
+其中：
+- **programOrder**：单线程内的指令顺序；
+- **monitorOrder**：监视器锁的加解锁顺序；
+- **volatileOrder**：`volatile` 变量的读写顺序；
+- 最后一项为传递性规则，确保顺序可链化。
+
+#### 3.2.2 内存屏障的跨架构映射
+JMM 通过抽象屏障接口屏蔽硬件差异，JIT 编译器根据目标架构生成具体指令：
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/216de331e1044b299c73a69935cd45f2.png)
+例如，`volatile`写操作在 x86 下生成`sfence`（写屏障），强制刷新 `Store Buffer` 到主存；读操作生成`lfence`，清空 `Invalidate Queue` 以获取最新数据。
+
+
+#### 3.2.3 原子操作的硬件原语实现
+
+J.U.C 包的atomic操作通过 JIT 映射到硬件原子指令：
+- `AtomicInteger.getAndIncrement()`在 x86 下编译为`lock inc`指令，利用总线锁确保原子性；
+- 在 ARMv8 架构下使用`ldaxr/stlxr`指令对实现 `LL/SC`（Load-Linked/Store-Conditional）机制，若 `Store` 时发现数据被修改则返回失败。
+
+
+.
+### 3.3 Java 内存模型的演进历程
+
+JDK 5 引入的 JMM 奠定了现代 Java 内存模型的基础，但后续版本仍在不断优化。在 JDK 7 中，对`ConcurrentHashMap`等并发容器进行了优化，采用分段锁机制提升并发性能；JDK 8 中，`StampedLock`的引入提供了乐观读等更灵活的锁机制。到了 JDK 11 及之后的版本，进一步优化了垃圾回收器与内存模型的协同工作，减少了内存回收过程中的停顿时间 。了解这些演进过程，有助于开发者在不同 JDK 版本中合理选择技术方案。
+
+#### 3.3.1 JDK7：分段锁与伪共享防护
+
+`ConcurrentHashMap` 在 JDK7 中采用 `Segment` 分段锁，将锁粒度从全局锁缩小到 16 个 `Segment`：
+
+```java
+// JDK7 ConcurrentHashMap核心结构
+static final class Segment<K,V> extends ReentrantLock {
+    transient volatile HashEntry<K,V>[] table;
+    // 每个Segment管理约1/16的哈希桶
+}
+```
+
+同时，对热点计数器（如 `size`）采用缓存行填充（`@sun.misc.Contended`注解），避免伪共享：
+
+```java
+// 防止伪共享的CounterCell定义
+@sun.misc.Contended
+static final class CounterCell {
+    volatile long value;
+    // 填充至64字节，避免与其他变量共享缓存行
+}
+```
+
+#### 3.3.2 JDK8：StampedLock 与 ForkJoinPool 优化
+
+`StampedLock` 引入 “**乐观读**” 模式，通过时间戳（`stamp`）实现无锁读操作：
+
+```java
+// 乐观读流程（性能比ReadWriteLock高3倍）
+long stamp = lock.tryOptimisticRead();
+int value = data;
+if (!lock.validate(stamp)) {  // 验证期间是否有写操作
+    stamp = lock.readLock();
+    try {
+        value = data;
+    } finally {
+        lock.unlockRead(stamp);
+    }
+}
+```
+
+`ForkJoinPool` 通过`volatile`修饰任务队列，利用 JMM 可见性规则实现工作窃取（`Work-Stealing`）：
+
+```java
+// ForkJoinPool的任务队列定义
+private volatile ForkJoinTask<?>[] array;
+```
+
+#### 3.3.2 DK11：ZGC 与内存模型的协同
+
+ZGC 垃圾收集器通过 “**颜色指针**” 技术与 JMM 协同：
+- 并发标记阶段利用volatile的可见性，确保标记线程能看到应用线程的对象修改；
+- 重定位阶段通过 StoreLoad 屏障保证对象引用的原子更新，避免出现 “悬垂引用”。
+
+
+.
+### 3.4 happens - before 关系的具体规则
+
+1. **程序顺序规则**：在同一个线程中，按照程序代码的顺序，前面的操作 `happens - before` 后面的操作。例如，在一个线程中，先执行语句`a = 1;`，再执行语句`b = a + 1;`，那么`a = 1; happens - before b = a + 1;`，即b的计算结果能够正确获取到a赋值后的1。
+
+3. **监视器锁规则**：对一个锁的解锁操作 `happens - before` 后续对同一个锁的加锁操作。当线程 A 对某对象加锁并执行完同步代码块后解锁，线程 B 随后对该对象加锁进入同步代码块，那么线程 A 在同步代码块中对共享变量的修改，线程 B 在进入同步代码块后都能看到。
+4. **volatile 变量规则**：对一个 `volatile` 变量的写操作 `happens - before` 后续对同一个变量的读操作。`volatile` 变量具有特殊的内存语义，写 `volatile` 变量会强制将变量的值刷新到主存，读 `volatile` 变量会强制从主存读取最新值，从而保证了不同线程之间对 `volatile` 变量的可见性。
+5. **线程启动规则**：线程对象的`start()`方法 `happens - before` 该线程中的任意操作。当在主线程中调用子线程的`start()`方法启动子线程后，子线程中的所有操作都能看到主线程在调用`start()`方法之前对共享变量所做的修改。
+6. **线程终止规则**：线程中的任意操作 `happens - before` 其他线程检测到该线程终止。当一个线程执行完毕后，其他线程通过`join()`方法等方式检测到该线程终止时，能看到该线程在执行过程中对共享变量的修改。
+7. **传递性规则**：如果 A `happens - before` B，B `happens - before` C，则 A `happens - before` C。通过传递性规则，可以将多个 `happens - before` 关系连接起来，形成更复杂的操作顺序约束。
+
+.
+## 四、Java 内存模型的实现原理
+
+### 4.1 硬件层面的支持
+
+Java 内存模型的实现离不开硬件层面的支持。如前文所述的 `MESI 协议`，为 Java 内存模型中共享变量的可见性提供了基础保障。当 Java 程序中对共享变量进行读写操作时，处理器会根据 `MESI 协议`对缓存行进行状态管理和同步，确保不同核心缓存中数据的一致性 。
+
+同时，处理器提供的**内存屏障指令**是 Java 内存模型实现有序性的重要支撑。内存屏障分为**读屏障**（`Load Barrier`）、**写屏障**（`Store Barrier`）和**全屏障**（`Full Barrier`）。读屏障确保在其之后的读操作不会被重排序到读屏障之前；写屏障确保在其之前的写操作不会被重排序到写屏障之后；全屏障则同时具备读屏障和写屏障的功能。
+
+例如，对`volatile`变量的读写操作，JVM 会在字节码层面插入相应的内存屏障指令，在 x86 架构中，写`volatile`变量时会使用`LOCK`前缀指令，它不仅能实现缓存一致性，还相当于一个写屏障，禁止指令重排序，保证`volatile`变量的内存语义。
+
+### 4.2 JVM 层面的实现
+
+在 JVM 层面，对于`synchronized`关键字，通过对象头中的 `Mark Word` 和 `Monitor` 对象来实现锁机制。`Mark Word` 用于存储对象的哈希码、分代年龄、锁标志位等信息，在不同的锁状态下，`Mark Word` 的结构有所不同。当线程获取锁时，会根据 `Mark Word` 中的锁标志位判断锁的状态，并进行相应的操作，如偏向锁的获取、轻量级锁的自旋尝试以及重量级锁的阻塞等待等。
+
+对于`volatile`变量，JVM 在编译时会在字节码中插入特殊的指令来实现其内存语义。当写`volatile`变量时，插入写屏障指令，强制将变量刷新到主存；当读`volatile`变量时，插入读屏障指令，强制从主存读取最新值。并且，JVM 会禁止编译器对`volatile`变量的读写操作进行重排序，确保其有序性 。
+
+对于原子类，JVM 通过调用底层操作系统提供的原子操作指令来实现 CAS 等操作。不同的操作系统和硬件架构提供的原子操作指令略有不同，但都能保证操作的原子性，JVM 对这些指令进行封装，使得 Java 开发者可以方便地使用原子类进行并发编程。
+
+
+
