@@ -56,4 +56,4 @@
 #### 2.2.1 MESI协议工作流程
 ![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/2dc31c385a4f4aeab378ea3c6c95269c.png)
 ![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/f60f755cabea43f9a0e8e0f9d1e0bdc6.png)
-**`下载后浏览器打开实际操作一下`**：[MESI协议工作原理详解.html](https://whs3hb2rbo.feishu.cn/docx/F36id5pgeoZYwNxrxVmcNy9jn56#share-AKaEd1ptho9PgyxYTsUckv65npd)
+**`下载后浏览器打开实际操作一下`**：[MESI协议工作原理详解.html](Java并发编程/file/MESI协议工作原理详解.html)
