@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPU缓存行结构详解</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2980, #26d0ce);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            padding: 30px 0;
+            margin-bottom: 30px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        }
+        
+        .subtitle {
+            font-size: 1.4rem;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+            color: #e0e0ff;
+        }
+        
+        .cache-info {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .cache-details {
+            flex: 1;
+            min-width: 300px;
+            background: rgba(20, 30, 80, 0.7);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
+        
+        .details-container {
+            margin-top: 20px;
+        }
+        
+        .detail-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .detail-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+        
+        .detail-title {
+            font-size: 1.4rem;
+            margin-bottom: 12px;
+            color: #4dabf7;
+            display: flex;
+            align-items: center;
+        }
+        
+        .detail-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            margin-right: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            background: #4dabf7;
+        }
+        
+        .detail-content {
+            line-height: 1.6;
+            color: #d0d0ff;
+        }
+        
+        .cache-line-structure {
+            flex: 1;
+            min-width: 400px;
+            background: rgba(20, 30, 80, 0.7);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
+        
+        .cache-structure {
+            margin-top: 20px;
+            height: 300px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .cache-header {
+            display: flex;
+            height: 60px;
+            border-bottom: 2px dashed #4dabf7;
+        }
+        
+        .tag-section {
+            flex: 2;
+            background: rgba(255, 107, 107, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .state-section {
+            flex: 1;
+            background: rgba(155, 89, 182, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .cache-body {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+        }
+        
+        .cache-byte {
+            width: calc(100% / 8);
+            height: calc(100% / 8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.9rem;
+            position: relative;
+        }
+        
+        .section-label {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .section-title {
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .cache-levels {
+            background: rgba(20, 30, 80, 0.7);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
+        
+        .levels-container {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .level {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            width: 200px;
+            position: relative;
+        }
+        
+        .level-title {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #4dabf7;
+        }
+        
+        .level-stats {
+            margin-bottom: 15px;
+        }
+        
+        .level-stat {
+            margin: 8px 0;
+        }
+        
+        .memory-hierarchy {
+            background: rgba(20, 30, 80, 0.7);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
+        
+        .hierarchy-chart {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 30px;
+        }
+        
+        .hierarchy-item {
+            width: 80%;
+            padding: 20px;
+            margin: 10px 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            transition: transform 0.3s;
+        }
+        
+        .hierarchy-item:hover {
+            transform: scale(1.03);
+        }
+        
+        .hierarchy-name {
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .hierarchy-stats {
+            text-align: right;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: #a0a0d0;
+            font-size: 0.9rem;
+        }
+        
+        .highlight {
+            color: #ffeb3b;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 768px) {
+            .cache-info {
+                flex-direction: column;
+            }
+            
+            .levels-container {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>CPU缓存行结构详解</h1>
+            <div class="subtitle">
+                现代计算机体系结构中的高速缓存机制 | 提升CPU性能的关键设计
+            </div>
+        </header>
+        
+        <div class="cache-info">
+            <div class="cache-details">
+                <h2>缓存行核心概念</h2>
+                <div class="details-container">
+                    <div class="detail-card">
+                        <div class="detail-title">
+                            <div class="detail-icon">64</div>
+                            缓存行大小
+                        </div>
+                        <div class="detail-content">
+                            现代CPU通常使用<span class="highlight">64字节</span>的缓存行大小。这是缓存与内存之间数据传输的最小单位，也是缓存一致性协议（如MESI）管理的最小单元。
+                        </div>
+                    </div>
+                    
+                    <div class="detail-card">
+                        <div class="detail-title">
+                            <div class="detail-icon">T</div>
+                            标记(Tag)
+                        </div>
+                        <div class="detail-content">
+                            标记存储内存地址的高位部分，用于标识缓存行对应的主存位置。通常占用<span class="highlight">20-40位</span>，具体取决于CPU架构和缓存大小。
+                        </div>
+                    </div>
+                    
+                    <div class="detail-card">
+                        <div class="detail-title">
+                            <div class="detail-icon">S</div>
+                            状态位(State)
+                        </div>
+                        <div class="detail-content">
+                            用于实现缓存一致性协议（如MESI）。包含：
+                            <ul>
+                                <li>Modified (已修改)</li>
+                                <li>Exclusive (独占)</li>
+                                <li>Shared (共享)</li>
+                                <li>Invalid (无效)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-card">
+                        <div class="detail-title">
+                            <div class="detail-icon">D</div>
+                            数据块(Data Block)
+                        </div>
+                        <div class="detail-content">
+                            实际存储数据的部分，大小为缓存行减去标记和状态位。通常组织为<span class="highlight">8个8字节</span>的字，支持高效访问各种数据类型。
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="cache-line-structure">
+                <h2>缓存行结构可视化</h2>
+                <div class="cache-structure">
+                    <div class="cache-header">
+                        <div class="tag-section">
+                            <div class="section-label">Tag (标记)</div>
+                            <div class="section-title">内存地址高位</div>
+                        </div>
+                        <div class="state-section">
+                            <div class="section-label">State (状态)</div>
+                            <div class="section-title">MESI</div>
+                        </div>
+                    </div>
+                    <div class="cache-body">
+                        <div class="cache-byte">0x00<br><span>0</span></div>
+                        <div class="cache-byte">0x01<br><span>1</span></div>
+                        <div class="cache-byte">0x02<br><span>2</span></div>
+                        <div class="cache-byte">0x03<br><span>3</span></div>
+                        <div class="cache-byte">0x04<br><span>4</span></div>
+                        <div class="cache-byte">0x05<br><span>5</span></div>
+                        <div class="cache-byte">0x06<br><span>6</span></div>
+                        <div class="cache-byte">0x07<br><span>7</span></div>
+                        
+                        <div class="cache-byte">0x08<br><span>8</span></div>
+                        <div class="cache-byte">0x09<br><span>9</span></div>
+                        <div class="cache-byte">0x0A<br><span>10</span></div>
+                        <div class="cache-byte">0x0B<br><span>11</span></div>
+                        <div class="cache-byte">0x0C<br><span>12</span></div>
+                        <div class="cache-byte">0x0D<br><span>13</span></div>
+                        <div class="cache-byte">0x0E<br><span>14</span></div>
+                        <div class="cache-byte">0x0F<br><span>15</span></div>
+                        
+                        <div class="cache-byte">0x10<br><span>16</span></div>
+                        <div class="cache-byte">0x11<br><span>17</span></div>
+                        <div class="cache-byte">0x12<br><span>18</span></div>
+                        <div class="cache-byte">0x13<br><span>19</span></div>
+                        <div class="cache-byte">0x14<br><span>20</span></div>
+                        <div class="cache-byte">0x15<br><span>21</span></div>
+                        <div class="cache-byte">0x16<br><span>22</span></div>
+                        <div class="cache-byte">0x17<br><span>23</span></div>
+                        
+                        <div class="cache-byte">0x18<br><span>24</span></div>
+                        <div class="cache-byte">0x19<br><span>25</span></div>
+                        <div class="cache-byte">0x1A<br><span>26</span></div>
+                        <div class="cache-byte">0x1B<br><span>27</span></div>
+                        <div class="cache-byte">0x1C<br><span>28</span></div>
+                        <div class="cache-byte">0x1D<br><span>29</span></div>
+                        <div class="cache-byte">0x1E<br><span>30</span></div>
+                        <div class="cache-byte">0x1F<br><span>31</span></div>
+                        
+                        <div class="cache-byte">0x20<br><span>32</span></div>
+                        <div class="cache-byte">0x21<br><span>33</span></div>
+                        <div class="cache-byte">0x22<br><span>34</span></div>
+                        <div class="cache-byte">0x23<br><span>35</span></div>
+                        <div class="cache-byte">0x24<br><span>36</span></div>
+                        <div class="cache-byte">0x25<br><span>37</span></div>
+                        <div class="cache-byte">0x26<br><span>38</span></div>
+                        <div class="cache-byte">0x27<br><span>39</span></div>
+                        
+                        <div class="cache-byte">0x28<br><span>40</span></div>
+                        <div class="cache-byte">0x29<br><span>41</span></div>
+                        <div class="cache-byte">0x2A<br><span>42</span></div>
+                        <div class="cache-byte">0x2B<br><span>43</span></div>
+                        <div class="cache-byte">0x2C<br><span>44</span></div>
+                        <div class="cache-byte">0x2D<br><span>45</span></div>
+                        <div class="cache-byte">0x2E<br><span>46</span></div>
+                        <div class="cache-byte">0x2F<br><span>47</span></div>
+                        
+                        <div class="cache-byte">0x30<br><span>48</span></div>
+                        <div class="cache-byte">0x31<br><span>49</span></div>
+                        <div class="cache-byte">0x32<br><span>50</span></div>
+                        <div class="cache-byte">0x33<br><span>51</span></div>
+                        <div class="cache-byte">0x34<br><span>52</span></div>
+                        <div class="cache-byte">0x35<br><span>53</span></div>
+                        <div class="cache-byte">0x36<br><span>54</span></div>
+                        <div class="cache-byte">0x37<br><span>55</span></div>
+                        
+                        <div class="cache-byte">0x38<br><span>56</span></div>
+                        <div class="cache-byte">0x39<br><span>57</span></div>
+                        <div class="cache-byte">0x3A<br><span>58</span></div>
+                        <div class="cache-byte">0x3B<br><span>59</span></div>
+                        <div class="cache-byte">0x3C<br><span>60</span></div>
+                        <div class="cache-byte">0x3D<br><span>61</span></div>
+                        <div class="cache-byte">0x3E<br><span>62</span></div>
+                        <div class="cache-byte">0x3F<br><span>63</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="cache-levels">
+            <h2>CPU缓存层次结构</h2>
+            <div class="levels-container">
+                <div class="level">
+                    <div class="level-title">L1 缓存</div>
+                    <div class="level-stats">
+                        <div class="level-stat">容量: 32-64KB/核心</div>
+                        <div class="level-stat">延迟: 1-3 周期</div>
+                        <div class="level-stat">速度: 最快</div>
+                    </div>
+                    <div class="level-description">
+                        最接近CPU核心的缓存，分为指令缓存和数据缓存
+                    </div>
+                </div>
+                
+                <div class="level">
+                    <div class="level-title">L2 缓存</div>
+                    <div class="level-stats">
+                        <div class="level-stat">容量: 256-1024KB/核心</div>
+                        <div class="level-stat">延迟: 8-12 周期</div>
+                        <div class="level-stat">速度: 中等</div>
+                    </div>
+                    <div class="level-description">
+                        比L1更大但稍慢，通常为每个核心独享
+                    </div>
+                </div>
+                
+                <div class="level">
+                    <div class="level-title">L3 缓存</div>
+                    <div class="level-stats">
+                        <div class="level-stat">容量: 16-64MB</div>
+                        <div class="level-stat">延迟: 20-40 周期</div>
+                        <div class="level-stat">速度: 较慢</div>
+                    </div>
+                    <div class="level-description">
+                        共享缓存，所有核心共用，减少内存访问
+                    </div>
+                </div>
+                
+                <div class="level">
+                    <div class="level-title">主内存</div>
+                    <div class="level-stats">
+                        <div class="level-stat">容量: GB级别</div>
+                        <div class="level-stat">延迟: 100-300 周期</div>
+                        <div class="level-stat">速度: 最慢</div>
+                    </div>
+                    <div class="level-description">
+                        DRAM存储器，CPU缓存的下一级
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="memory-hierarchy">
+            <h2>存储器层次结构性能对比</h2>
+            <div class="hierarchy-chart">
+                <div class="hierarchy-item" style="background: rgba(255, 107, 107, 0.3);">
+                    <div class="hierarchy-name">CPU寄存器</div>
+                    <div class="hierarchy-stats">容量: 100s字节<br>延迟: 0.5-1 ns</div>
+                </div>
+                
+                <div class="hierarchy-item" style="background: rgba(77, 171, 247, 0.3);">
+                    <div class="hierarchy-name">L1缓存</div>
+                    <div class="hierarchy-stats">容量: 32-64 KB<br>延迟: 1-3 ns</div>
+                </div>
+                
+                <div class="hierarchy-item" style="background: rgba(64, 192, 87, 0.3);">
+                    <div class="hierarchy-name">L2缓存</div>
+                    <div class="hierarchy-stats">容量: 256-1024 KB<br>延迟: 3-10 ns</div>
+                </div>
+                
+                <div class="hierarchy-item" style="background: rgba(155, 89, 182, 0.3);">
+                    <div class="hierarchy-name">L3缓存</div>
+                    <div class="hierarchy-stats">容量: 16-64 MB<br>延迟: 10-30 ns</div>
+                </div>
+                
+                <div class="hierarchy-item" style="background: rgba(241, 196, 15, 0.3);">
+                    <div class="hierarchy-name">主内存 (DRAM)</div>
+                    <div class="hierarchy-stats">容量: GB级别<br>延迟: 50-100 ns</div>
+                </div>
+                
+                <div class="hierarchy-item" style="background: rgba(230, 126, 34, 0.3);">
+                    <div class="hierarchy-name">固态硬盘 (SSD)</div>
+                    <div class="hierarchy-stats">容量: TB级别<br>延迟: 50,000-100,000 ns</div>
+                </div>
+                
+                <div class="hierarchy-item" style="background: rgba(149, 165, 166, 0.3);">
+                    <div class="hierarchy-name">机械硬盘 (HDD)</div>
+                    <div class="hierarchy-stats">容量: TB级别<br>延迟: 5,000,000-10,000,000 ns</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>CPU缓存行结构详解 | 现代计算机体系结构核心组件 | 提升程序性能的关键优化点</p>
+        </div>
+    </div>
+    
+    <script>
+        // 动态效果：使缓存行中的字节块随机高亮
+        function animateCacheBytes() {
+            const bytes = document.querySelectorAll('.cache-byte');
+            const randomByte = bytes[Math.floor(Math.random() * bytes.length)];
+            
+            randomByte.style.backgroundColor = 'rgba(77, 171, 247, 0.4)';
+            randomByte.style.boxShadow = '0 0 15px rgba(77, 171, 247, 0.7)';
+            
+            setTimeout(() => {
+                randomByte.style.backgroundColor = '';
+                randomByte.style.boxShadow = '';
+            }, 500);
+        }
+        
+        // 持续运行动画
+        setInterval(animateCacheBytes, 300);
+    </script>
+</body>
+</html>
