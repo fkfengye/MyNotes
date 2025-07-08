@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java内存模型与硬件存储关系图</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2980, #26d0ce);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            width: 95%;
+            max-width: 1200px;
+            background: rgba(255, 255, 255, 0.97);
+            border-radius: 15px;
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.25);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(90deg, #2c3e50, #4a6582);
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: #3498db;
+            text-shadow: 0 2px 3px rgba(0, 0, 0, 0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            max-width: 800px;
+            margin: 0 auto;
+            color: #ecf0f1;
+        }
+        
+        .content {
+            display: flex;
+            padding: 30px;
+            gap: 30px;
+        }
+        
+        .left-panel {
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .right-panel {
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .panel-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+        }
+        
+        .panel-title i {
+            margin-right: 10px;
+            font-size: 28px;
+        }
+        
+        .jmm-title {
+            border-bottom-color: #3498db;
+        }
+        
+        .jvm-title {
+            border-bottom-color: #2ecc71;
+        }
+        
+        .hardware-title {
+            border-bottom-color: #e74c3c;
+        }
+        
+        .mapping-box {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border-left: 5px solid;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+        
+        .mapping-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+        
+        .box-title {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .box-title i {
+            margin-right: 10px;
+            font-size: 20px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .box-content {
+            color: #555;
+            line-height: 1.6;
+            padding-left: 40px;
+        }
+        
+        .relation-diagram {
+            background: #f8f9fa;
+            padding: 40px 30px;
+            border-top: 1px solid #eaeaea;
+            border-bottom: 1px solid #eaeaea;
+        }
+        
+        .relation-title {
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            color: #2c3e50;
+            text-align: center;
+        }
+        
+        .diagram-container {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            min-height: 300px;
+        }
+        
+        .diagram-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .diagram-header {
+            width: 100%;
+            padding: 15px;
+            background: #2c3e50;
+            color: white;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        
+        .diagram-item {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            width: 90%;
+            margin: 10px 0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border-top: 4px solid;
+            position: relative;
+        }
+        
+        .item-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .item-title i {
+            margin-right: 8px;
+        }
+        
+        .connection-line {
+            position: absolute;
+            height: 2px;
+            background: #3498db;
+            z-index: 1;
+        }
+        
+        .connection-line::after {
+            content: '';
+            position: absolute;
+            right: -10px;
+            top: -4px;
+            border: 6px solid transparent;
+            border-left-color: #3498db;
+        }
+        
+        .vertical-connection {
+            position: absolute;
+            width: 2px;
+            background: #e74c3c;
+            z-index: 1;
+        }
+        
+        .vertical-connection::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: -4px;
+            border: 6px solid transparent;
+            border-top-color: #e74c3c;
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            margin-top: 40px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 0 15px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 25px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            font-size: 0.95rem;
+        }
+        
+        @media (max-width: 900px) {
+            .content {
+                flex-direction: column;
+            }
+            
+            .diagram-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .diagram-column {
+                width: 100%;
+                margin-bottom: 40px;
+            }
+            
+            .connection-line, .vertical-connection {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Java内存模型与硬件存储关联关系</h1>
+            <div class="subtitle">JMM、JVM内存结构和硬件存储的多层次映射解析</div>
+        </header>
+        
+        <div class="content">
+            <div class="left-panel">
+                <h2 class="panel-title jmm-title"><i class="fas fa-project-diagram"></i> Java内存模型 (JMM)</h2>
+                
+                <div class="mapping-box" style="border-left-color: #3498db;">
+                    <h3 class="box-title"><i class="fas fa-eye" style="background: #3498db;"></i> 主内存 (Main Memory)</h3>
+                    <div class="box-content">
+                        <p><strong>JVM对应：</strong> 堆内存、方法区（存储共享变量）</p>
+                        <p><strong>硬件对应：</strong> 主内存(RAM) + CPU缓存(L3)</p>
+                        <p><strong>特性：</strong> 所有线程共享，volatile变量直接存储在主内存</p>
+                    </div>
+                </div>
+                
+                <div class="mapping-box" style="border-left-color: #2980b9;">
+                    <h3 class="box-title"><i class="fas fa-brain" style="background: #2980b9;"></i> 工作内存 (Working Memory)</h3>
+                    <div class="box-content">
+                        <p><strong>JVM对应：</strong> 虚拟机栈的部分区域（局部变量表）</p>
+                        <p><strong>硬件对应：</strong> CPU寄存器 + 高速缓存(L1/L2)</p>
+                        <p><strong>特性：</strong> 线程私有，存储主内存数据的副本</p>
+                    </div>
+                </div>
+                
+                <div class="mapping-box" style="border-left-color: #1f618d;">
+                    <h3 class="box-title"><i class="fas fa-exchange-alt" style="background: #1f618d;"></i> 内存屏障 (Memory Barriers)</h3>
+                    <div class="box-content">
+                        <p><strong>JVM实现：</strong> LoadLoad, StoreStore, LoadStore, StoreLoad屏障</p>
+                        <p><strong>硬件实现：</strong> CPU指令 (mfence, lfence, sfence)</p>
+                        <p><strong>作用：</strong> 控制指令重排序和内存可见性</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="right-panel">
+                <h2 class="panel-title jvm-title"><i class="fas fa-microchip"></i> JVM内存结构</h2>
+                
+                <div class="mapping-box" style="border-left-color: #2ecc71;">
+                    <h3 class="box-title"><i class="fas fa-cubes" style="background: #2ecc71;"></i> 堆 (Heap)</h3>
+                    <div class="box-content">
+                        <p><strong>JMM对应：</strong> 主内存（存储对象实例）</p>
+                        <p><strong>硬件对应：</strong> 主内存(RAM) + CPU缓存(L3)</p>
+                        <p><strong>特性：</strong> GC管理，所有线程共享</p>
+                    </div>
+                </div>
+                
+                <div class="mapping-box" style="border-left-color: #27ae60;">
+                    <h3 class="box-title"><i class="fas fa-layer-group" style="background: #27ae60;"></i> 虚拟机栈 (JVM Stack)</h3>
+                    <div class="box-content">
+                        <p><strong>JMM对应：</strong> 工作内存（局部变量）</p>
+                        <p><strong>硬件对应：</strong> CPU寄存器 + 高速缓存(L1)</p>
+                        <p><strong>特性：</strong> 线程私有，存储栈帧</p>
+                    </div>
+                </div>
+                
+                <div class="mapping-box" style="border-left-color: #219653;">
+                    <h3 class="box-title"><i class="fas fa-archive" style="background: #219653;"></i> 方法区 (Method Area)</h3>
+                    <div class="box-content">
+                        <p><strong>JMM对应：</strong> 主内存（存储类信息、常量）</p>
+                        <p><strong>硬件对应：</strong> 主内存(RAM) + 磁盘（虚拟内存）</p>
+                        <p><strong>特性：</strong> JDK8后由元空间实现</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="relation-diagram">
+            <h2 class="relation-title">关联关系可视化</h2>
+            <div class="diagram-container">
+                <!-- Java内存模型 (JMM) 列 -->
+                <div class="diagram-column">
+                    <div class="diagram-header" style="background: #3498db;">Java内存模型 (JMM)</div>
+                    
+                    <div class="diagram-item" style="border-top-color: #3498db;">
+                        <div class="item-title"><i class="fas fa-memory"></i> 主内存</div>
+                        <p>存储共享变量</p>
+                    </div>
+                    
+                    <div class="diagram-item" style="border-top-color: #2980b9;">
+                        <div class="item-title"><i class="fas fa-brain"></i> 工作内存</div>
+                        <p>线程私有数据副本</p>
+                    </div>
+                    
+                    <div class="diagram-item" style="border-top-color: #1f618d;">
+                        <div class="item-title"><i class="fas fa-exchange-alt"></i> 内存屏障</div>
+                        <p>控制重排序和可见性</p>
+                    </div>
+                </div>
+                
+                <!-- 连接线 -->
+                <div class="connection-line" style="top: 150px; left: 33%; width: 34%;"></div>
+                <div class="connection-line" style="top: 240px; left: 33%; width: 34%;"></div>
+                <div class="connection-line" style="top: 330px; left: 33%; width: 34%;"></div>
+                
+                <!-- JVM内存结构 列 -->
+                <div class="diagram-column">
+                    <div class="diagram-header" style="background: #2ecc71;">JVM内存结构</div>
+                    
+                    <div class="diagram-item" style="border-top-color: #2ecc71;">
+                        <div class="item-title"><i class="fas fa-cubes"></i> 堆</div>
+                        <p>存储对象实例</p>
+                    </div>
+                    
+                    <div class="diagram-item" style="border-top-color: #27ae60;">
+                        <div class="item-title"><i class="fas fa-layer-group"></i> 虚拟机栈</div>
+                        <p>线程私有栈帧</p>
+                    </div>
+                    
+                    <div class="diagram-item" style="border-top-color: #219653;">
+                        <div class="item-title"><i class="fas fa-archive"></i> 方法区</div>
+                        <p>类信息、常量池</p>
+                    </div>
+                </div>
+                
+                <!-- 连接线 -->
+                <div class="connection-line" style="top: 150px; left: 66%; width: 34%;"></div>
+                <div class="connection-line" style="top: 240px; left: 66%; width: 34%;"></div>
+                <div class="connection-line" style="top: 330px; left: 66%; width: 34%;"></div>
+                
+                <!-- 硬件存储结构 列 -->
+                <div class="diagram-column">
+                    <div class="diagram-header" style="background: #e74c3c;">硬件存储结构</div>
+                    
+                    <div class="diagram-item" style="border-top-color: #e74c3c;">
+                        <div class="item-title"><i class="fas fa-memory"></i> 主内存 (RAM)</div>
+                        <p>50-100ns 访问时间</p>
+                    </div>
+                    
+                    <div class="diagram-item" style="border-top-color: #c0392b;">
+                        <div class="item-title"><i class="fas fa-tachometer-alt"></i> CPU缓存 (L1/L2/L3)</div>
+                        <p>1-20ns 访问时间</p>
+                    </div>
+                    
+                    <div class="diagram-item" style="border-top-color: #a5281c;">
+                        <div class="item-title"><i class="fas fa-microchip"></i> CPU寄存器</div>
+                        <p>0.5-1ns 访问时间</p>
+                    </div>
+                </div>
+                
+                <!-- 垂直连接线 -->
+                <div class="vertical-connection" style="top: 150px; left: 20%; height: 180px;"></div>
+                <div class="vertical-connection" style="top: 240px; left: 50%; height: 180px;"></div>
+                <div class="vertical-connection" style="top: 330px; left: 80%; height: 180px;"></div>
+            </div>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #3498db;"></div>
+                    <div>Java内存模型 (JMM)</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2ecc71;"></div>
+                    <div>JVM内存结构</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e74c3c;"></div>
+                    <div>硬件存储结构</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #3498db; width: 30px; height: 2px;"></div>
+                    <div>JMM到JVM关联</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e74c3c; width: 30px; height: 2px;"></div>
+                    <div>JVM到硬件关联</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Java内存模型与硬件存储关联关系图 | 深入理解Java内存系统 | 性能优化基础</p>
+            <p>© 2023 Java技术研究 | 数据来源：JVM规范、计算机体系结构原理</p>
+        </div>
+    </div>
+    
+    <script>
+        // 添加简单的动画效果
+        document.querySelectorAll('.mapping-box, .diagram-item').forEach(el => {
+            el.style.transform = 'translateY(20px)';
+            el.style.opacity = '0';
+            el.style.transition = 'transform 0.5s, opacity 0.5s';
+        });
+        
+        setTimeout(() => {
+            document.querySelectorAll('.mapping-box, .diagram-item').forEach((el, index) => {
+                setTimeout(() => {
+                    el.style.transform = 'translateY(0)';
+                    el.style.opacity = '1';
+                }, index * 200);
+            });
+        }, 500);
+    </script>
+</body>
+</html>

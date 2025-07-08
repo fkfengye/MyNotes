@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java早期内存模型的不足</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(to bottom, #1e3c72, #2a5298);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: #3498db;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            max-width: 800px;
+            margin: 0 auto;
+            color: #ecf0f1;
+        }
+        
+        .timeline {
+            padding: 40px;
+            position: relative;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 4px;
+            background: #3498db;
+            margin-left: -2px;
+        }
+        
+        .timeline-item {
+            margin-bottom: 50px;
+            position: relative;
+            display: flex;
+            justify-content: flex-end;
+            padding-right: 30px;
+        }
+        
+        .timeline-item:nth-child(even) {
+            justify-content: flex-start;
+            padding-left: 30px;
+            padding-right: 0;
+        }
+        
+        .timeline-content {
+            width: 45%;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+            border-left: 4px solid #3498db;
+            position: relative;
+        }
+        
+        .timeline-item:nth-child(even) .timeline-content {
+            border-left: none;
+            border-right: 4px solid #e74c3c;
+        }
+        
+        .timeline-year {
+            position: absolute;
+            top: 20px;
+            left: -75px;
+            background: #3498db;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            width: 60px;
+            text-align: center;
+        }
+        
+        .timeline-item:nth-child(even) .timeline-year {
+            left: auto;
+            right: -75px;
+            background: #e74c3c;
+        }
+        
+        .timeline-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .problem-section {
+            padding: 40px;
+            background: #ecf0f1;
+        }
+        
+        .section-title {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 40px;
+            color: #2c3e50;
+        }
+        
+        .problems-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 25px;
+            justify-content: center;
+        }
+        
+        .problem-card {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border-top: 4px solid #e74c3c;
+            transition: transform 0.3s;
+        }
+        
+        .problem-card:hover {
+            transform: translateY(-10px);
+        }
+        
+        .problem-title {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: #e74c3c;
+            display: flex;
+            align-items: center;
+        }
+        
+        .problem-title i {
+            margin-right: 10px;
+            font-size: 1.5rem;
+        }
+        
+        .problem-content {
+            color: #34495e;
+            line-height: 1.7;
+        }
+        
+        .problem-content ul {
+            padding-left: 20px;
+            margin-top: 15px;
+        }
+        
+        .problem-content li {
+            margin-bottom: 10px;
+        }
+        
+        .visualization {
+            padding: 40px;
+            background: #2c3e50;
+            color: white;
+        }
+        
+        .thread-container {
+            display: flex;
+            justify-content: space-around;
+            margin: 40px 0;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .thread {
+            width: 250px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 20px;
+            position: relative;
+        }
+        
+        .thread-title {
+            text-align: center;
+            margin-bottom: 15px;
+            color: #3498db;
+            font-weight: bold;
+        }
+        
+        .memory-model {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 10px;
+            min-height: 150px;
+        }
+        
+        .variable {
+            padding: 8px;
+            margin: 5px 0;
+            background: rgba(52, 152, 219, 0.3);
+            border-radius: 4px;
+        }
+        
+        .code-sample {
+            background: #1a2530;
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 30px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+        
+        .code-comment {
+            color: #7f8c8d;
+        }
+        
+        .code-keyword {
+            color: #3498db;
+        }
+        
+        .code-method {
+            color: #2ecc71;
+        }
+        
+        .code-variable {
+            color: #e74c3c;
+        }
+        
+        .conclusion {
+            padding: 40px;
+            text-align: center;
+            background: #3498db;
+            color: white;
+        }
+        
+        .conclusion h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+        
+        .conclusion-content {
+            max-width: 800px;
+            margin: 0 auto;
+            font-size: 1.1rem;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #2c3e50;
+            color: #ecf0f1;
+        }
+        
+        @media (max-width: 768px) {
+            .timeline::before {
+                left: 30px;
+            }
+            
+            .timeline-item, .timeline-item:nth-child(even) {
+                padding-left: 60px;
+                padding-right: 0;
+                justify-content: flex-start;
+            }
+            
+            .timeline-content {
+                width: 100%;
+            }
+            
+            .timeline-year {
+                left: -5px;
+                top: -25px;
+            }
+            
+            .timeline-item:nth-child(even) .timeline-year {
+                left: -5px;
+                right: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Java早期内存模型的不足</h1>
+            <div class="subtitle">1995-2004年Java多线程编程的主要问题与挑战</div>
+        </header>
+        
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="timeline-year">1995</div>
+                <div class="timeline-content">
+                    <h3 class="timeline-title">Java诞生</h3>
+                    <p>Java 1.0发布，提出了"一次编写，到处运行"的理念。但此时的内存模型非常基础，主要依赖synchronized关键字实现同步。</p>
+                    <p>多线程支持有限，没有明确定义的内存可见性和指令重排序规则。</p>
+                </div>
+            </div>
+            
+            <div class="timeline-item">
+                <div class="timeline-year">1997</div>
+                <div class="timeline-content">
+                    <h3 class="timeline-title">JDK 1.1发布</h3>
+                    <p>引入了wait()/notify()机制，但内存模型问题开始显现：</p>
+                    <ul>
+                        <li>线程间可见性问题</li>
+                        <li>指令重排序导致意外行为</li>
+                        <li>缺乏有效的内存屏障支持</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="timeline-item">
+                <div class="timeline-year">1999</div>
+                <div class="timeline-content">
+                    <h3 class="timeline-title">Java 2发布</h3>
+                    <p>虽然改进了API，但内存模型的基本问题仍未解决：</p>
+                    <p>编译器、JVM和处理器各自进行优化，导致多线程行为不一致：</p>
+                    <ul>
+                        <li>单处理器上运行正常</li>
+                        <li>多处理器上出现随机错误</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="timeline-item">
+                <div class="timeline-year">2004</div>
+                <div class="timeline-content">
+                    <h3 class="timeline-title">JSR-133发布</h3>
+                    <p>Java内存模型(JMM)的重大修订：</p>
+                    <ul>
+                        <li>明确定义了happens-before关系</li>
+                        <li>解决了指令重排序问题</li>
+                        <li>规范了volatile语义</li>
+                        <li>增强了final字段的可见性保证</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="problem-section">
+            <h2 class="section-title">早期Java内存模型的主要问题</h2>
+            <div class="problems-container">
+                <div class="problem-card">
+                    <h3 class="problem-title"><i>🔄</i> 指令重排序问题</h3>
+                    <div class="problem-content">
+                        <p>编译器和处理器为了优化性能，会对指令进行重排序：</p>
+                        <ul>
+                            <li>没有内存屏障约束</li>
+                            <li>单线程正确，多线程错误</li>
+                            <li>重排序导致逻辑顺序破坏</li>
+                        </ul>
+                        <p><strong>典型表现：</strong> 初始化未完成就被使用</p>
+                    </div>
+                </div>
+                
+                <div class="problem-card">
+                    <h3 class="problem-title"><i>👁️</i> 可见性问题</h3>
+                    <div class="problem-content">
+                        <p>线程对共享变量的修改不可见：</p>
+                        <ul>
+                            <li>无volatile关键字保证</li>
+                            <li>CPU缓存不一致</li>
+                            <li>修改延迟可见</li>
+                        </ul>
+                        <p><strong>典型表现：</strong> 无限循环、数据不一致</p>
+                    </div>
+                </div>
+                
+                <div class="problem-card">
+                    <h3 class="problem-title"><i>🧩</i> 同步机制不足</h3>
+                    <div class="problem-content">
+                        <p>synchronized和wait/notify存在缺陷：</p>
+                        <ul>
+                            <li>性能开销大</li>
+                            <li>容易死锁</li>
+                            <li>缺乏高级并发原语</li>
+                        </ul>
+                        <p><strong>典型表现：</strong> 死锁、活锁、性能低下</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="visualization">
+            <h2 class="section-title" style="color: white;">多线程问题可视化</h2>
+            
+            <div class="thread-container">
+                <div class="thread">
+                    <div class="thread-title">线程1</div>
+                    <div class="memory-model">
+                        <div class="variable">本地缓存: flag = false</div>
+                        <div class="variable">本地缓存: data = 0</div>
+                        <div class="variable">操作: data = 42</div>
+                        <div class="variable">操作: flag = true</div>
+                    </div>
+                </div>
+                
+                <div class="thread">
+                    <div class="thread-title">线程2</div>
+                    <div class="memory-model">
+                        <div class="variable">本地缓存: flag = false</div>
+                        <div class="variable">本地缓存: data = 0</div>
+                        <div class="variable">操作: while (!flag);</div>
+                        <div class="variable">操作: print(data); // 输出0</div>
+                    </div>
+                </div>
+                
+                <div class="thread">
+                    <div class="thread-title">主内存</div>
+                    <div class="memory-model">
+                        <div class="variable">flag = false</div>
+                        <div class="variable">data = 0</div>
+                        <div class="variable" style="background: rgba(231, 76, 60, 0.3);">状态: 不一致</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="code-sample">
+                <pre><span class="code-keyword">public class</span> <span style="color: #f1c40f;">VisibilityProblem</span> {
+    <span class="code-keyword">private</span> <span class="code-keyword">static</span> <span class="code-keyword">boolean</span> <span class="code-variable">flag</span> = <span class="code-keyword">false</span>;
+    <span class="code-keyword">private</span> <span class="code-keyword">static</span> <span class="code-keyword">int</span> <span class="code-variable">data</span> = 0;
+    
+    <span class="code-keyword">public static void</span> <span class="code-method">main</span>(String[] args) {
+        <span class="code-comment">// 线程1</span>
+        <span class="code-keyword">new</span> Thread(() -> {
+            <span class="code-variable">data</span> = 42;          <span class="code-comment">// 可能被重排序到flag=true之后</span>
+            <span class="code-variable">flag</span> = <span class="code-keyword">true</span>;      <span class="code-comment">// 修改可能不会立即写回主存</span>
+        }).<span class="code-method">start</span>();
+        
+        <span class="code-comment">// 线程2</span>
+        <span class="code-keyword">new</span> Thread(() -> {
+            <span class="code-keyword">while</span> (!<span class="code-variable">flag</span>);     <span class="code-comment">// 可能永远看不到flag变为true</span>
+            System.<span class="code-method">out</span>.<span class="code-method">println</span>(<span class="code-variable">data</span>); <span class="code-comment">// 可能输出0而不是42</span>
+        }).<span class="code-method">start</span>();
+    }
+}</pre>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px; color: #ecf0f1;">
+                <p>早期Java内存模型问题：指令重排序和可见性问题导致多线程程序行为不可预测</p>
+            </div>
+        </div>
+        
+        <div class="conclusion">
+            <h2>JSR-133：Java内存模型的重生</h2>
+            <div class="conclusion-content">
+                <p>2004年发布的JSR-133彻底解决了早期Java内存模型的问题：</p>
+                <p>1. 定义了明确的happens-before规则，规范了指令重排序行为</p>
+                <p>2. 增强了volatile关键字的语义，保证可见性和禁止重排序</p>
+                <p>3. 明确了final字段的初始化保证</p>
+                <p>4. 为Java并发包(java.util.concurrent)奠定了基础</p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Java内存模型发展历史 | 多线程编程的演进 | 理解现代Java并发基础</p>
+            <p>© 2023 Java技术研究 | 数据来源：JSR-133规范文档</p>
+        </div>
+    </div>
+    
+    <script>
+        // 添加简单的动画效果
+        document.querySelectorAll('.timeline-content, .problem-card').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.5s, transform 0.5s';
+        });
+        
+        setTimeout(() => {
+            document.querySelectorAll('.timeline-content, .problem-card').forEach((el, index) => {
+                setTimeout(() => {
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateY(0)';
+                }, index * 200);
+            });
+        }, 500);
+        
+        // 代码高亮效果
+        const code = document.querySelector('.code-sample');
+        code.addEventListener('mouseover', function() {
+            this.style.boxShadow = '0 0 20px rgba(52, 152, 219, 0.5)';
+        });
+        
+        code.addEventListener('mouseout', function() {
+            this.style.boxShadow = 'none';
+        });
+    </script>
+</body>
+</html>
