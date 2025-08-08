@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReentrantReadWriteLock 共享读锁流程详解</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 25px;
+            width: 100%;
+            background: rgba(0, 30, 60, 0.6);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(100, 180, 255, 0.2);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            color: #e0f7ff;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(0, 40, 80, 0.5);
+            border-radius: 12px;
+            width: 100%;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            padding: 6px 12px;
+            background: rgba(0, 20, 40, 0.4);
+            border-radius: 8px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        
+        .content {
+            display: flex;
+            width: 100%;
+            gap: 25px;
+            margin-top: 20px;
+        }
+        
+        .visualization {
+            flex: 3;
+            background: rgba(0, 30, 60, 0.5);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid rgba(100, 180, 255, 0.2);
+        }
+        
+        .explanation {
+            flex: 2;
+            background: rgba(0, 30, 60, 0.5);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(100, 180, 255, 0.2);
+            overflow-y: auto;
+            max-height: 700px;
+        }
+        
+        .explanation h2 {
+            font-size: 1.6rem;
+            margin-bottom: 20px;
+            color: #4facfe;
+            text-align: center;
+        }
+        
+        .step-info {
+            background: rgba(0, 60, 120, 0.3);
+            padding: 18px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border-left: 4px solid #00f2fe;
+        }
+        
+        .step-info h3 {
+            font-size: 1.3rem;
+            margin-bottom: 12px;
+            color: #00f2fe;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .step-details {
+            line-height: 1.6;
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+        
+        .state-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            background: rgba(0, 20, 40, 0.4);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .state-table th {
+            background: rgba(74, 107, 227, 0.6);
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 0.95rem;
+        }
+        
+        .state-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(100, 180, 255, 0.2);
+            font-size: 0.95rem;
+        }
+        
+        .state-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .lock-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 30px;
+            background: rgba(0, 20, 40, 0.4);
+            padding: 20px;
+            border-radius: 12px;
+            width: 100%;
+            position: relative;
+        }
+        
+        .state-circle {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a2a6c, #4facfe);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+            font-size: 1.1rem;
+            font-weight: bold;
+            position: relative;
+            z-index: 2;
+            border: 3px solid rgba(100, 200, 255, 0.3);
+        }
+        
+        .state-value {
+            font-size: 3rem;
+            margin-top: 8px;
+            color: #00f2fe;
+        }
+        
+        .lock-label {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #4facfe;
+        }
+        
+        .queue-container {
+            width: 100%;
+            min-height: 200px;
+            background: rgba(0, 20, 40, 0.4);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            margin-bottom: 25px;
+        }
+        
+        .queue-title {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #00f2fe;
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+        
+        .queue {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 30px;
+            min-height: 150px;
+        }
+        
+        .node {
+            width: 140px;
+            height: 180px;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .node.head::before {
+            content: 'HEAD';
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(74, 107, 227, 0.8);
+            padding: 3px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+        
+        .node.tail::after {
+            content: 'TAIL';
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(74, 107, 227, 0.8);
+            padding: 3px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+        
+        .node.locked {
+            box-shadow: 0 0 15px #00f2fe;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .node.blocked {
+            opacity: 0.7;
+            filter: grayscale(50%);
+        }
+        
+        .node-type {
+            font-size: 1rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #00f2fe;
+        }
+        
+        .thread-info {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin: 6px 0;
+        }
+        
+        .status-info {
+            font-size: 0.9rem;
+            margin: 4px 0;
+            color: #ffcc00;
+        }
+        
+        .hold-count {
+            background: rgba(0, 242, 254, 0.2);
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+            font-weight: bold;
+        }
+        
+        .arrow {
+            font-size: 2rem;
+            color: #4facfe;
+            display: flex;
+            align-items: center;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+            width: 100%;
+        }
+        
+        button {
+            padding: 12px 25px;
+            font-size: 1.1rem;
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        }
+        
+        button:disabled {
+            background: linear-gradient(135deg, #7a9fc2, #7fd4d9);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .step-indicator {
+            font-size: 1.1rem;
+            margin-top: 15px;
+            font-weight: bold;
+            background: rgba(0, 60, 120, 0.4);
+            padding: 10px 20px;
+            border-radius: 20px;
+        }
+        
+        .thread-states {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+            width: 100%;
+            flex-wrap: wrap;
+        }
+        
+        .thread-card {
+            background: rgba(0, 40, 80, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            min-width: 120px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .thread-card.active {
+            background: rgba(74, 107, 227, 0.5);
+            box-shadow: 0 0 15px rgba(79, 172, 254, 0.5);
+        }
+        
+        .thread-card h4 {
+            color: #00f2fe;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+        
+        .thread-state {
+            font-weight: bold;
+            font-size: 1rem;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 10px #00f2fe; }
+            50% { box-shadow: 0 0 20px #00f2fe; }
+            100% { box-shadow: 0 0 10px #00f2fe; }
+        }
+        
+        @media (max-width: 900px) {
+            .content {
+                flex-direction: column;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-book-reader"></i> ReentrantReadWriteLock 共享读锁流程详解</h1>
+            <p class="subtitle">本可视化专注于分析ReentrantReadWriteLock中共享读锁的特性，展示多个读线程如何共享读锁</p>
+        </header>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #1e3c72;"></div>
+                <span>读锁节点</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #4facfe;"></div>
+                <span>持有读锁</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ffcc00;"></div>
+                <span>SIGNAL状态(-1)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #d76d77;"></div>
+                <span>阻塞线程</span>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="visualization">
+                <div class="lock-state">
+                    <div class="lock-label">读锁状态</div>
+                    <div class="state-circle">
+                        <div>读锁计数</div>
+                        <div class="state-value">0</div>
+                        <div>readHolds</div>
+                    </div>
+                </div>
+                
+                <div class="queue-container">
+                    <div class="queue-title">AQS同步队列 (读锁共享)</div>
+                    <div class="queue">
+                        <!-- 队列节点将通过JS动态生成 -->
+                        <div style="color: #aaa; font-size: 1.1rem;">同步队列为空</div>
+                    </div>
+                </div>
+                
+                <div class="thread-states">
+                    <div class="thread-card" id="t1-card">
+                        <h4>读线程 T1</h4>
+                        <div class="thread-state">未启动</div>
+                    </div>
+                    <div class="thread-card" id="t2-card">
+                        <h4>读线程 T2</h4>
+                        <div class="thread-state">未启动</div>
+                    </div>
+                    <div class="thread-card" id="t3-card">
+                        <h4>读线程 T3</h4>
+                        <div class="thread-state">未启动</div>
+                    </div>
+                    <div class="thread-card" id="t4-card">
+                        <h4>读线程 T4</h4>
+                        <div class="thread-state">未启动</div>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button id="prev-btn" disabled>
+                        <i class="fas fa-arrow-left"></i> 上一步
+                    </button>
+                    <button id="next-btn">
+                        下一步 <i class="fas fa-arrow-right"></i>
+                    </button>
+                    <button id="reset-btn">
+                        <i class="fas fa-sync-alt"></i> 重置
+                    </button>
+                </div>
+                
+                <div class="step-indicator">步骤 1/8: 初始状态</div>
+            </div>
+            
+            <div class="explanation">
+                <h2><i class="fas fa-info-circle"></i> 读锁流程说明</h2>
+                <div class="step-info">
+                    <h3><i class="fas fa-play-circle"></i> 步骤 1: 初始状态</h3>
+                    <div class="step-details">
+                        <p>读锁计数: <strong>0</strong> (无读锁持有)</p>
+                        <p>同步队列: <strong>空</strong></p>
+                        <p>所有读线程尚未启动</p>
+                    </div>
+                    
+                    <table class="state-table">
+                        <tr>
+                            <th>状态</th>
+                            <th>值</th>
+                            <th>描述</th>
+                        </tr>
+                        <tr>
+                            <td>读锁</td>
+                            <td>0</td>
+                            <td>无读锁持有</td>
+                        </tr>
+                        <tr>
+                            <td>head</td>
+                            <td>null</td>
+                            <td>队列头节点</td>
+                        </tr>
+                        <tr>
+                            <td>tail</td>
+                            <td>null</td>
+                            <td>队列尾节点</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 步骤数据 - 专注于读锁共享流程
+        const steps = [
+            {
+                title: "步骤 1: 初始状态",
+                readState: 0,
+                queue: [],
+                activeThreads: [],
+                blockedThreads: [],
+                explanation: {
+                    title: "步骤 1: 初始状态",
+                    details: "读锁计数: 0 (无读锁持有)\n同步队列: 空\n所有读线程尚未启动\n\n读锁特性:\n- 读锁是共享的，允许多个线程同时获取\n- 读锁计数记录持有读锁的线程数"
+                }
+            },
+            {
+                title: "步骤 2: T1获取读锁",
+                readState: 1,
+                queue: [],
+                activeThreads: ["T1"],
+                blockedThreads: [],
+                explanation: {
+                    title: "步骤 2: T1获取读锁（成功）",
+                    details: "T1调用readLock().lock()，成功获取读锁\n读锁计数: 1 (T1持有读锁)\n同步队列: 仍为空\n\n实现细节:\n- 使用CAS操作增加读锁计数\n- 第一次获取读锁的线程会初始化readHolds"
+                }
+            },
+            {
+                title: "步骤 3: T2获取读锁",
+                readState: 2,
+                queue: [],
+                activeThreads: ["T1", "T2"],
+                blockedThreads: [],
+                explanation: {
+                    title: "步骤 3: T2获取读锁（成功）",
+                    details: "T2调用readLock().lock()，成功获取读锁\n读锁计数: 2 (T1和T2持有读锁)\n同步队列: 仍为空\n\n读锁共享:\n- 多个读线程可以同时持有读锁\n- 读锁计数递增\n- 不会阻塞其他读线程"
+                }
+            },
+            {
+                title: "步骤 4: T3获取读锁",
+                readState: 3,
+                queue: [],
+                activeThreads: ["T1", "T2", "T3"],
+                blockedThreads: [],
+                explanation: {
+                    title: "步骤 4: T3获取读锁（成功）",
+                    details: "T3调用readLock().lock()，成功获取读锁\n读锁计数: 3 (T1,T2,T3持有读锁)\n同步队列: 仍为空\n\n线程本地存储:\n- 每个线程维护自己的读锁持有计数\n- 通过ThreadLocal存储每个线程的重入次数"
+                }
+            },
+            {
+                title: "步骤 5: T1释放读锁",
+                readState: 2,
+                queue: [],
+                activeThreads: ["T2", "T3"],
+                blockedThreads: [],
+                explanation: {
+                    title: "步骤 5: T1释放读锁",
+                    details: "T1调用readLock().unlock()，释放读锁\n读锁计数从3减至2 (T2和T3仍持有读锁)\n同步队列: 仍为空\n\n释放机制:\n- 减少读锁计数和线程本地计数\n- 如果计数归零，清除线程本地存储"
+                }
+            },
+            {
+                title: "步骤 6: T4尝试获取读锁",
+                readState: 3,
+                queue: [],
+                activeThreads: ["T2", "T3", "T4"],
+                blockedThreads: [],
+                explanation: {
+                    title: "步骤 6: T4获取读锁（成功）",
+                    details: "T4调用readLock().lock()，成功获取读锁\n读锁计数: 3 (T2,T3,T4持有读锁)\n同步队列: 仍为空\n\n无竞争场景:\n- 没有写锁竞争时，读锁获取非常高效\n- 仅涉及计数器的原子操作"
+                }
+            },
+            {
+                title: "步骤 7: T2释放读锁",
+                readState: 2,
+                queue: [],
+                activeThreads: ["T3", "T4"],
+                blockedThreads: [],
+                explanation: {
+                    title: "步骤 7: T2释放读锁",
+                    details: "T2调用readLock().unlock()，释放读锁\n读锁计数从3减至2 (T3和T4仍持有读锁)\n同步队列: 仍为空\n\n重入支持:\n- 读锁支持重入，线程可以多次获取\n- 每次释放减少计数，直到归零才完全释放"
+                }
+            },
+            {
+                title: "步骤 8: T3和T4释放读锁",
+                readState: 0,
+                queue: [],
+                activeThreads: [],
+                blockedThreads: [],
+                explanation: {
+                    title: "步骤 8: T3和T4释放读锁",
+                    details: "T3和T4调用readLock().unlock()，释放读锁\n读锁计数归零 (无读锁持有)\n同步队列: 仍为空\n\n完全释放:\n- 最后一个读锁释放后，锁状态完全空闲\n- 此时可以获取写锁或其他读锁"
+                }
+            }
+        ];
+
+        let currentStep = 0;
+        const queueContainer = document.querySelector('.queue');
+        const readStateValue = document.querySelector('.state-value');
+        const stepIndicator = document.querySelector('.step-indicator');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const explanation = document.querySelector('.step-info');
+        
+        // 线程卡片
+        const threadCards = {
+            'T1': document.getElementById('t1-card'),
+            'T2': document.getElementById('t2-card'),
+            'T3': document.getElementById('t3-card'),
+            'T4': document.getElementById('t4-card')
+        };
+
+        // 渲染当前步骤
+        function renderStep(stepIndex) {
+            const step = steps[stepIndex];
+            
+            // 更新锁状态
+            readStateValue.textContent = step.readState;
+            
+            // 更新步骤指示器
+            stepIndicator.textContent = `${step.title} (${stepIndex + 1}/${steps.length})`;
+            
+            // 更新解释
+            explanation.innerHTML = `
+                <h3><i class="fas fa-play-circle"></i> ${step.explanation.title}</h3>
+                <div class="step-details">${step.explanation.details.replace(/\n/g, '<br>')}</div>
+                ${generateStateTable(step)}
+            `;
+            
+            // 渲染队列
+            renderQueue(step.queue);
+            
+            // 更新线程状态
+            updateThreadCards(step);
+            
+            // 更新按钮状态
+            prevBtn.disabled = stepIndex === 0;
+            nextBtn.disabled = stepIndex === steps.length - 1;
+        }
+
+        // 生成状态表格
+        function generateStateTable(step) {
+            let head = 'null';
+            let tail = 'null';
+            
+            if (step.queue.length > 0) {
+                const headNode = step.queue.find(node => node.isHead);
+                const tailNode = step.queue.find(node => node.isTail);
+                head = headNode ? headNode.id : 'null';
+                tail = tailNode ? tailNode.id : 'null';
+            }
+            
+            return `
+                <table class="state-table">
+                    <tr>
+                        <th>状态</th>
+                        <th>值</th>
+                        <th>描述</th>
+                    </tr>
+                    <tr>
+                        <td>读锁</td>
+                        <td>${step.readState}</td>
+                        <td>${step.readState === 0 ? '无读锁持有' : `${step.readState}个读锁持有`}</td>
+                    </tr>
+                    <tr>
+                        <td>head</td>
+                        <td>${head}</td>
+                        <td>队列头节点</td>
+                    </tr>
+                    <tr>
+                        <td>tail</td>
+                        <td>${tail}</td>
+                        <td>队列尾节点</td>
+                    </tr>
+                </table>
+            `;
+        }
+
+        // 渲染队列
+        function renderQueue(queue) {
+            queueContainer.innerHTML = '';
+            
+            if (queue.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.textContent = '同步队列为空';
+                emptyMsg.style.color = '#aaa';
+                emptyMsg.style.fontSize = '1.1rem';
+                emptyMsg.style.marginTop = '20px';
+                queueContainer.appendChild(emptyMsg);
+                return;
+            }
+            
+            queue.forEach((node, index) => {
+                const nodeEl = document.createElement('div');
+                nodeEl.className = 'node';
+                
+                if (node.locked) {
+                    nodeEl.classList.add('locked');
+                }
+                
+                if (node.blocked) {
+                    nodeEl.classList.add('blocked');
+                }
+                
+                if (node.isHead) {
+                    nodeEl.classList.add('head');
+                }
+                
+                if (node.isTail) {
+                    nodeEl.classList.add('tail');
+                }
+                
+                nodeEl.innerHTML = `
+                    <div class="node-type">读锁节点</div>
+                    <div class="thread-info">${node.thread}</div>
+                    <div class="status-info">${node.locked ? '持有锁' : node.blocked ? '阻塞中' : '等待中'}</div>
+                    <div class="hold-count">持有计数: ${node.holdCount || 1}</div>
+                `;
+                
+                queueContainer.appendChild(nodeEl);
+                
+                // 添加箭头（除了最后一个节点）
+                if (index < queue.length - 1) {
+                    const arrow = document.createElement('div');
+                    arrow.className = 'arrow';
+                    arrow.innerHTML = '→';
+                    queueContainer.appendChild(arrow);
+                }
+            });
+        }
+
+        // 更新线程卡片
+        function updateThreadCards(step) {
+            // 重置所有卡片
+            Object.values(threadCards).forEach(card => {
+                card.classList.remove('active', 'blocked');
+                const stateEl = card.querySelector('.thread-state');
+                stateEl.textContent = '未启动';
+            });
+            
+            // 更新活动线程
+            step.activeThreads.forEach(thread => {
+                const activeCard = threadCards[thread];
+                activeCard.classList.add('active');
+                const stateEl = activeCard.querySelector('.thread-state');
+                stateEl.textContent = '运行中 (持有读锁)';
+            });
+            
+            // 更新阻塞线程
+            step.blockedThreads.forEach(thread => {
+                const blockedCard = threadCards[thread];
+                blockedCard.classList.add('blocked');
+                const stateEl = blockedCard.querySelector('.thread-state');
+                stateEl.textContent = '阻塞中';
+            });
+            
+            // 更新非活动线程
+            ['T1', 'T2', 'T3', 'T4'].forEach(thread => {
+                if (!step.activeThreads.includes(thread) && !step.blockedThreads.includes(thread)) {
+                    const threadCard = threadCards[thread];
+                    const stateEl = threadCard.querySelector('.thread-state');
+                    
+                    if (step.readState === 0) {
+                        stateEl.textContent = '未启动';
+                    } else {
+                        stateEl.textContent = '等待中';
+                    }
+                }
+            });
+        }
+
+        // 初始化
+        renderStep(currentStep);
+
+        // 事件监听
+        nextBtn.addEventListener('click', () => {
+            if (currentStep < steps.length - 1) {
+                currentStep++;
+                renderStep(currentStep);
+            }
+        });
+
+        prevBtn.addEventListener('click', () => {
+            if (currentStep > 0) {
+                currentStep--;
+                renderStep(currentStep);
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            currentStep = 0;
+            renderStep(currentStep);
+        });
+    </script>
+</body>
+</html>
