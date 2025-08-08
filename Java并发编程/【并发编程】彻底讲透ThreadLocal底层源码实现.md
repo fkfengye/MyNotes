@@ -626,7 +626,6 @@ private T setInitialValue() {
 }
 ```
 
-![img.png](img.png)
 
 .
 
