@@ -827,3 +827,567 @@ private void setHead(Node node) {
 ](https://github.com/fkfengye/MyNotes/blob/main/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/file/ReentrantLock%E5%A4%9A%E7%BA%BF%E7%A8%8B%E8%8E%B7%E5%8F%96%E9%94%81%E6%B5%81%E7%A8%8B%E8%AF%A6%E8%A7%A3.html)
 ![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/b73d99bb434c4e468ec777f2596ed259.png#pic_center)
 
+
+
+### 2、共享锁
+
+`ReentrantLock` 主要用于实现独占锁，而 Java 标准库中的另外一个类 `ReentrantReadWriteLock` 可用于实现共享锁和独占锁的功能。其中读锁是共享锁，允许多个线程同时读取共享资源；写锁是独占锁，同一时间只允许一个线程进行写操作
+
+
+#### 2.1 以ReentrantReadWriteLock 实现共享读锁的示例代码
+
+```java
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+public class SharedLockDemo {
+    // 初始化 ReentrantReadWriteLock 实例
+    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+    // 获取读锁
+    private final ReentrantReadWriteLock.ReadLock readLock = rwLock.readLock();
+    // 模拟共享资源
+    private int sharedResource = 0;
+
+    /**
+     * 读取共享资源的方法
+     * @return 共享资源的值
+     */
+    public int readSharedResource() {
+        // 获取读锁
+        readLock.lock();
+        try {
+            System.out.println(Thread.currentThread().getName() + " 获取读锁，正在读取共享资源");
+            // 模拟读取操作耗时
+            Thread.sleep(100);
+            return sharedResource;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return -1;
+        } finally {
+            // 释放读锁
+            readLock.unlock();
+            System.out.println(Thread.currentThread().getName() + " 释放读锁");
+        }
+    }
+
+    public static void main(String[] args) {
+        SharedLockDemo demo = new SharedLockDemo();
+
+        // 创建多个读线程
+        for (int i = 0; i < 5; i++) {
+            new Thread(() -> {
+                int value = demo.readSharedResource();
+                System.out.println(Thread.currentThread().getName() + " 读取到的共享资源值为: " + value);
+            }, "读线程-" + i).start();
+        }
+    }
+}
+```
+
+输出结果：
+
+```java
+读线程-0 获取读锁，正在读取共享资源
+读线程-1 获取读锁，正在读取共享资源
+读线程-2 获取读锁，正在读取共享资源
+读线程-3 获取读锁，正在读取共享资源
+读线程-4 获取读锁，正在读取共享资源
+读线程-0 释放读锁
+读线程-1 释放读锁
+读线程-1 读取到的共享资源值为: 0
+读线程-2 释放读锁
+读线程-2 读取到的共享资源值为: 0
+读线程-0 读取到的共享资源值为: 0
+读线程-4 释放读锁
+读线程-4 读取到的共享资源值为: 0
+读线程-3 释放读锁
+读线程-3 读取到的共享资源值为: 0
+```
+
+.
+#### 2.2 构造函数 - 默认构造非公平锁
+
+```java
+public ReentrantReadWriteLock() {
+    this(false);
+}
+
+/**
+ * 默认构造非公平锁
+ * 同时构造读写锁
+ */
+public ReentrantReadWriteLock(boolean fair) {
+    sync = fair ? new FairSync() : new NonfairSync();
+    readerLock = new ReadLock(this);
+    writerLock = new WriteLock(this);
+}
+
+public ReentrantReadWriteLock.WriteLock writeLock() { return writerLock; }
+public ReentrantReadWriteLock.ReadLock  readLock()  { return readerLock; }
+```
+
+- `sync` 是 `ReentrantReadWriteLock` 的内部同步器：继承自 `AbstractQueuedSynchronizer` 根据 `fair` 参数决定创建 `FairSync` 或 `NonfairSync` 实例
+- **公平锁 vs 非公平锁**：
+    - **公平锁（FairSync）**：按照线程请求锁的顺序分配锁，保证了锁的获取顺序，但可能会降低吞吐量
+    - **非公平锁（NonfairSync）**：允许线程插队，如果锁恰好可用，线程可以直接获取而不需要排队，这样可以提高吞吐量，但可能导致某些线程长时间等待
+    - 如果你关心线程饥饿问题，应该使用公平锁；如果你更关心系统的整体吞吐量，可以使用非公平锁
+- `readerLock` 和 `writerLock` 分别是读锁和写锁的实例，两者都与当前的 `ReentrantReadWriteLock` 实例关联
+
+
+.
+#### 2.3 readLock.lock() 获取锁
+
+```java
+public void lock() {
+    sync.acquireShared(1);
+}
+```
+
+- 这是读锁的加锁方法，用于获取共享模式的锁权限。允许多个线程同时持有读锁（只要没有写锁被占用）
+- `acquireShared(1)`调用AQS框架的共享锁获取方法，参数1表示获取1个共享单元
+
+
+.
+#### 2.4 AQS 共享锁获取流程 acquireShared(1)
+
+`acquireShared` 方法的主要作用是以共享模式获取锁，在此过程中会忽略线程中断。共享模式意味着多个线程可以同时持有锁，适用于读操作等场景
+
+```java
+public final void acquireShared(int arg) {
+    if (tryAcquireShared(arg) < 0)
+        doAcquireShared(arg);
+}
+```
+
+这段代码体现了模板方法模式，`acquireShared`是final方法，定义了算法骨架，而`tryAcquireShared`是抽象方法，需要子类根据具体同步器语义来实现。这种设计使得AQS可以支持多种同步语义，如独占模式（`ReentrantLock`）和共享模式（读写锁的读锁、`Semaphore`等）
+- 首先调用`tryAcquireShared(arg)`尝试以共享模式获取锁，该方法由子类实现具体的锁获取逻辑
+    - 若返回值`< 0`：表示获取失败，则调用`doAcquireShared(arg)`将线程加入同步队列并阻塞
+    - 返回值 `> 0`：成功获取锁且后续线程可能也能获取
+    - 返回值 `= 0`：成功获取锁但后续线程无法获取
+
+.
+##### 2.4.1 tryAcquireShared(1) - 尝试获取共享锁
+
+该方法是`ReentrantReadWriteLock`内部同步器`Sync`类中的`tryAcquireShared`方法实现，这是读锁获取的核心逻辑，负责以共享模式尝试获取锁权限。
+这段代码巧妙地利用了AQS的状态变量设计，通过高低16位分离读写锁计数，实现了高效的读写锁分离控制，同时通过各种优化（如`firstReader`缓存、`ThreadLocal`计数）减少了多线程竞争开销
+
+```java
+protected final int tryAcquireShared(int unused) {
+    Thread current = Thread.currentThread();
+    int c = getState();
+    // 步骤1：检查写锁状态
+    if (exclusiveCount(c) != 0 && getExclusiveOwnerThread() != current)
+        return -1; // 有其他线程持有写锁，获取失败
+    
+    // 步骤2：尝试获取读锁
+    int r = sharedCount(c);
+    
+    // 步骤3：读锁获取条件
+    if (!readerShouldBlock() && r < MAX_COUNT && compareAndSetState(c, c + SHARED_UNIT)) {
+        // 步骤4：处理读锁重入计数
+        
+        // 首次获取：记录第一个获取读锁的线程，避免ThreadLocal查找开销
+        if (r == 0) {
+            firstReader = current;
+            firstReaderHoldCount = 1;
+            
+        // 重入计数跟踪：对第一个线程的重入直接计数，减少ThreadLocal访问    
+        } else if (firstReader == current) {  
+            firstReaderHoldCount++;
+        
+        // 普通线程计数    
+        } else {
+            HoldCounter rh = cachedHoldCounter;
+            if (rh == null || rh.tid != getThreadId(current))
+                // 第一次做初始化操作
+                cachedHoldCounter = rh = readHolds.get();
+            else if (rh.count == 0)
+                // 更新计数器
+                readHolds.set(rh);
+            // 重入次数 +1    
+            rh.count++;
+        }
+        
+        // 获取成功
+        return 1;
+    }
+    
+    // 步骤5：完整重试逻辑
+    return fullTryAcquireShared(current);
+}
+```
+
+
+- **步骤1**：检查写锁状态
+    - `exclusiveCount(c)`：通过`c & EXCLUSIVE_MASK`计算写锁计数（低16位）
+    - 若写锁已被其他线程持有，直接返回-1（AQS规定负数表示获取失败）
+    - 允许写锁降级：持有写锁的线程可同时获取读锁
+- **步骤2**：尝试获取读锁 `sharedCount(c)`：等价于 `c >>> 16`（高16位为读锁计数）
+- **步骤3**：读锁获取条件
+    - `readerShouldBlock()`：
+        - 公平锁实现：`hasQueuedPredecessors()`（判断同步队列是否有前驱节点）
+        - 非公平锁实现：`apparentlyFirstQueuedIsExclusive()`（判断队列头是否为写锁节点）
+    - `MAX_COUNT`：读锁最大计数（65535），防止高16位溢出
+    - `SHARED_UNIT`：读锁计数单位（1 << 16 = 65536），每次加1实际是状态值+65536
+    - CAS操作：原子更新状态变量，保证多线程并发安全
+- **步骤4**：普通线程计数部分
+    - 通过`ThreadLocal<HoldCounter>`跟踪每个线程的读锁持有次数
+    - `cachedHoldCounter`缓存上次访问的线程计数器，减少`ThreadLocal`查找
+- **步骤5**：失败处理逻辑。当快速路径（CAS）失败时，调用`fullTryAcquireShared(current)`进入完整重试逻辑，处理
+    - 读锁重入（当前线程已持有读锁）
+    - CAS竞争失败后的重试
+    - 读锁计数溢出检查
+    - 队列阻塞策略的完整实现
+
+###### （a）锁的几种同步状态
+
+```java
+static final int SHARED_SHIFT   = 16;
+static final int SHARED_UNIT    = (1 << SHARED_SHIFT);
+static final int MAX_COUNT      = (1 << SHARED_SHIFT) - 1;
+static final int EXCLUSIVE_MASK = (1 << SHARED_SHIFT) - 1;
+
+// 提取读锁计数（高16位）
+static int sharedCount(int c) { return c >>> SHARED_SHIFT; }
+// 提取写锁计数（低16位）
+static int exclusiveCount(int c) { return c & EXCLUSIVE_MASK; }
+```
+
+- `SHARED_SHIFT = 16`
+    - 作用：定义读锁（共享锁）在`state`状态变量中的位移量。
+    - 设计逻辑：`ReentrantReadWriteLock`使用一个32位的int类型变量`state`同时记录读锁和写锁的重入次数：
+        - 高16位：存储读锁（共享锁）的重入次数
+        - 低16位：存储写锁（独占锁）的重入次数
+    - 示例：通过`state >>> SHARED_SHIFT`（无符号右移16位）可提取高16位的读锁计数。
+- `SHARED_UNIT = (1 << SHARED_SHIFT)`
+    - 计算值：1 << 16 = 65536
+    - 作用：读锁的计数单位。每次获取读锁时，`state`需要增加`SHARED_UNIT`（即高16位加1）。
+    - 示例：获取一次读锁时，执行`state += SHARED_UNIT`，相当于高16位的读锁计数加1。
+- `MAX_COUNT = (1 << SHARED_SHIFT) - 1`
+    - 计算值：`2^16 - 1 = 65535`
+    - 作用：读写锁的最大可重入次数限制（读锁和写锁各自最多65535次重入）。
+    - 保护逻辑：若重入次数超过此值（如`sharedCount(c) >= MAX_COUNT`），会抛出Error("Maximum lock count exceeded")。
+- `EXCLUSIVE_MASK = (1 << SHARED_SHIFT) - 1`
+    - 计算值：同`MAX_COUNT（65535）`
+    - 作用：写锁的掩码。通过`state & EXCLUSIVE_MASK`可提取低16位的写锁计数。
+    - 示例：`exclusiveCount(c) = c & EXCLUSIVE_MASK`，直接获取低16位的写锁重入次数。
+
+
+
+###### （b）readerShouldBlock()
+
+判断同步队列首个等待节点是否为独占模式。该方法返回 true 时，表示同步队列中第一个有效等待节点是独占模式。这一判断主要用于：
+- 公平锁策略：在尝试获取锁时，若队列中已有等待的独占节点，当前线程需让步，避免“插队”
+- 同步器状态校验：辅助 `tryAcquire`、`release` 等方法决策是否允许当前线程获取/释放锁
+
+```java
+final boolean apparentlyFirstQueuedIsExclusive() {
+    // 分别用于存储同步队列的头节点（head）和头节点的下一个节点
+    Node h, s;
+    return (h = head) != null &&
+        (s = h.next)  != null &&
+        !s.isShared()         &&
+        s.thread != null;
+}
+```
+
+**return 判断逻辑：**
+
+- `(h = head) != null`：头节点 head 存在（队列非空）
+- `(s = h.next) != null`：头节点的下一个节点 s 存在（队列中至少有一个等待节点）
+- `!s.isShared()`：节点 s 不是共享模式（即独占模式，如 `ReentrantLock` 的写锁）
+- `s.thread != null`：节点 s 关联的线程未被取消（`thread` 不为空表示有效等待）
+
+
+
+###### （c）fullTryAcquireShared - 完整的共享锁获取逻辑
+
+`fullTryAcquireShared` 是读锁获取的“完整路径”实现，通过循环重试、状态校验和原子操作，处理了写锁降级、公平策略、重入计数等复杂场景，是`ReentrantReadWriteLock`支持“**多读单写**”高并发特性的核心逻辑之一。该方法是 `Sync` 内部类的成员，属于 AQS（`AbstractQueuedSynchronizer`）共享模式的扩展实现，主要用于：
+- 处理读锁的重入逻辑（支持写锁持有者降级为读锁）
+- 校验读锁是否需要阻塞（基于公平/非公平策略）
+- 确保读锁计数不超过最大值（`MAX_COUNT`）
+
+```java
+final int fullTryAcquireShared(Thread current) {
+    HoldCounter rh = null;
+    for (;;) { // 无限循环：CAS操作的重试机制
+        int c = getState(); // 获取当前锁状态（高16位读锁计数，低16位写锁计数）
+
+        // 步骤1. 检查是否存在写锁（独占锁）
+        if (exclusiveCount(c) != 0) {
+            if (getExclusiveOwnerThread() != current)
+                return -1; // 写锁被其他线程持有，获取读锁失败
+            // 否则：当前线程持有写锁（允许降级为读锁，不阻塞）
+        }
+
+        // 步骤2. 检查读锁是否需要阻塞（公平策略决定）
+        else if (readerShouldBlock()) {
+            if (firstReader == current) {
+                // 当前线程是第一个读锁持有者（允许重入）
+            } else {
+                // 非第一个读锁持有者：检查当前线程的读锁持有计数
+                if (rh == null) rh = cachedHoldCounter;
+                if (rh == null || rh.tid != getThreadId(current)) {
+                    rh = readHolds.get(); // 从ThreadLocal获取当前线程的HoldCounter
+                    if (rh.count == 0) readHolds.remove(); // 无持有计数则清理
+                }
+                if (rh.count == 0) return -1; // 无重入资格，获取失败
+            }
+        }
+
+        // 步骤3. 检查读锁计数是否超过最大值（65535）
+        if (sharedCount(c) == MAX_COUNT)
+            throw new Error("Maximum lock count exceeded");
+
+        // 步骤4. 尝试CAS更新读锁计数（+SHARED_UNIT=65536）
+        if (compareAndSetState(c, c + SHARED_UNIT)) {
+            if (sharedCount(c) == 0) {
+                firstReader = current;     // 第一个读锁持有者
+                firstReaderHoldCount = 1;
+            } else if (firstReader == current) {
+                firstReaderHoldCount++;     // 第一个读锁持有者重入
+            } else {
+                // 非第一个读锁持有者：更新ThreadLocal中的HoldCounter
+                if (rh == null) rh = cachedHoldCounter;
+                if (rh == null || rh.tid != getThreadId(current))
+                    rh = readHolds.get();
+                else if (rh.count == 0)
+                    readHolds.set(rh);
+                rh.count++;
+                cachedHoldCounter = rh; // 缓存HoldCounter，优化释放时的性能
+            }
+            return 1; // 获取成功
+        }
+    }
+}
+```
+
+- **步骤1**：写锁降级支持
+    - 若当前线程已持有写锁（`exclusiveCount(c) != 0`且`getExclusiveOwnerThread() == current`），允许其获取读锁（写锁→读锁的降级），避免死锁
+- **步骤2**：公平策略校验，`readerShouldBlock()` 由具体同步器（`FairSync`/`NonfairSync`）实现：
+    - 公平锁：检查同步队列中是否有前驱节点（`hasQueuedPredecessors()`），避免“插队”
+    - 非公平锁：直接返回false（允许竞争）
+- **步骤4**：读锁重入计数
+    - `firstReader`：记录第一个获取读锁的线程（优化高频单线程读场景）
+    - `readHolds`：`ThreadLocal<HoldCounter>`，存储其他线程的读锁重入次数（避免多线程竞争）
+    - `cachedHoldCounter`：缓存最近使用的`HoldCounter`，减少`ThreadLocal.get()`的开销
+
+.
+##### 2.4.2 doAcquireShared - 共享锁加入队列等等
+
+该方法是`AQS`的私有方法，属于共享模式获取锁的底层实现，与独占模式的 `acquireQueued` 对应。其核心职责是：当线程无法直接获取共享锁时，将线程加入同步队列等待，并在条件满足时唤醒。
+该方法与独占模式的 `acquireQueued` 的主要区别在于：共享模式在获取成功后可能唤醒多个后续节点（通过`setHeadAndPropagate`），而独占模式仅唤醒一个节点（通过`unparkSuccessor`）
+
+```java
+private void doAcquireShared(int arg) {
+    // 步骤1. 创建共享模式等待节点并加入队列
+    final Node node = addWaiter(Node.SHARED);
+    boolean failed = true;
+    try {
+        boolean interrupted = false;
+        
+        // 步骤2. 无限循环尝试获取锁
+        for (;;) {
+            final Node p = node.predecessor(); // 获取当前节点的前驱节点
+            // 步骤3. 前驱是头节点（当前节点是队列中的第一个有效节点）
+            if (p == head) {
+                int r = tryAcquireShared(arg); // 尝试获取共享锁（由子类实现）
+                if (r >= 0) { // 获取成功（r >=0 表示剩余许可足够）
+                    // 步骤4. 更新头节点并传播唤醒
+                    setHeadAndPropagate(node, r);
+                    p.next = null; // 断开前驱节点的next引用（帮助GC）
+                    if (interrupted) // 处理中断标记
+                        selfInterrupt();
+                    failed = false;
+                    return;
+                }
+            }
+            // 步骤5. 获取失败时，检查是否需要阻塞当前线程
+            if (shouldParkAfterFailedAcquire(p, node) && // 判断是否需要阻塞
+                parkAndCheckInterrupt()) // 阻塞并检查中断
+                interrupted = true;
+        }
+    } finally {
+        if (failed) // 6. 异常或失败时取消当前节点的获取
+            cancelAcquire(node);
+    }
+}
+```
+
+该方法就不详细说了，对比 **acquireQueued** 方法的源码解析来看
+
+
+.
+
+#### 2.5 readLock.unlock() 释放读锁
+
+```java
+public void unlock() {
+    sync.releaseShared(1);
+}
+```
+
+`releaseShared` 该方法是AQS（抽象队列同步器）中共享锁释放的核心入口方法，用于释放共享模式下的锁资源，并唤醒后续等待共享锁的线程
+
+```java
+public final boolean releaseShared(int arg) {
+    if (tryReleaseShared(arg)) {
+        doReleaseShared();
+        return true;
+    }
+    return false;
+}
+```
+
+该方法体现了AQS对共享锁的**释放-传播**机制：通过模板方法`tryReleaseShared`将具体释放逻辑委托给子类，同时通过`doReleaseShared`统一处理队列唤醒，保证了共享锁场景下多线程唤醒的公平性和效率
+- `tryReleaseShared(arg)` 尝试释放共享锁
+    - 这是一个由子类（如`ReentrantReadWriteLock`的读锁）实现的模板方法，负责实际释放共享锁的状态（例如减少读锁的重入计数）。若返回true，表示共享锁已成功释放，需要进一步唤醒后续等待线程
+- `doReleaseShared()` 唤醒后续共享节点
+    - 若`tryReleaseShared`返回true，则调用此方法。其核心作用是：通过CAS操作设置头节点状态（`Node.SIGNAL`），并唤醒头节点的后继节点（`Node.next`），确保共享锁的释放能够传播给多个后续等待共享锁的线程（与独占锁仅唤醒一个线程不同）
+- 返回值含义
+    - 返回true：共享锁释放成功且已触发唤醒逻辑；
+    - 返回false：共享锁未成功释放（`tryReleaseShared`返回false，可能因状态未满足释放条件）
+
+
+##### 2.5.1 tryReleaseShared(arg) 尝试释放共享锁
+
+该方法是 ReentrantReadWriteLock 中读锁（共享锁）释放的核心实现，通过维护线程本地的重入计数和原子更新同步状态（state），实现了读锁的可重入性和共享释放逻辑，是ReentrantReadWriteLock读写锁协作的核心机制之一
+
+```java
+/**
+ * 尝试释放共享读锁（重入计数递减）。
+ * 此方法由AQS的releaseShared调用，用于更新线程本地的读锁重入计数，并原子性更新同步状态。
+ * @param unused 未使用的参数（共享锁释放通常不需要具体参数）
+ * @return 若所有读锁和写锁均已释放（state=0），返回true，触发后续唤醒等待线程
+ */
+protected final boolean tryReleaseShared(int unused) {
+    // 获取当前线程
+    Thread current = Thread.currentThread();
+
+    // 情况1：当前线程是第一个获取读锁的线程（优化常见场景）
+    if (firstReader == current) {
+        // 断言：第一个读线程的重入计数应大于0
+        // assert firstReaderHoldCount > 0;
+        if (firstReaderHoldCount == 1) {
+            // 若重入计数为1（最后一次释放），清空第一个读线程记录
+            firstReader = null;
+        } else {
+            // 否则递减重入计数
+            firstReaderHoldCount--;
+        }
+        
+    // 情况2：当前线程不是第一个读线程，通过缓存或ThreadLocal获取重入计数器    
+    } else {
+        HoldCounter rh = cachedHoldCounter;
+        // 缓存不匹配（缓存的线程ID与当前线程不一致）
+        if (rh == null || rh.tid != getThreadId(current)) {
+            // 从ThreadLocal中获取当前线程的HoldCounter（存储重入计数）
+            rh = readHolds.get();
+        }
+        // 获取当前线程的重入计数
+        int count = rh.count;
+        if (count <= 1) {
+            // 若重入计数≤1（最后一次释放），从ThreadLocal中移除，避免内存泄漏
+            readHolds.remove();
+            // 防御性检查：若计数≤0，说明未匹配的unlock操作（异常）
+            if (count <= 0) {
+                throw unmatchedUnlockException();
+            }
+        }
+        // 递减当前线程的重入计数
+        --rh.count;
+    }
+
+    // 循环CAS更新AQS的同步状态（state）
+    for (;;) {
+        // 获取当前同步状态（高16位为读锁计数，低16位为写锁计数）
+        int c = getState();
+        // 计算释放后的状态（读锁计数减1单位，即SHARED_UNIT=1<<16）
+        int nextc = c - SHARED_UNIT;
+        // 原子更新状态（CAS保证线程安全）
+        if (compareAndSetState(c, nextc)) {
+            // 仅当所有锁（读+写）均释放时（nextc=0），返回true以触发后续唤醒
+            return nextc == 0;
+        }
+    }
+}
+```
+
+- 线程本地计数管理：通过`firstReader`（优化单线程重复获取）和`readHolds`（`ThreadLocal`存储其他线程计数）维护各线程的读锁重入次数
+- 内存泄漏预防：当线程的重入计数`≤1`时，从`readHolds`中移除计数器，避免无用对象残留
+- 原子状态更新：通过循环CAS确保同步状态（`state`）的原子性修改，仅当所有锁释放时触发唤醒，保证写锁的独占性
+- 锁语义保证：仅当所有读锁释放（`state == 0`）时才唤醒写线程，确保写锁的“**独占性**”——写锁需等待所有读锁释放后才能获取
+
+
+
+##### 2.5.2 doReleaseShared() 唤醒后续共享节点
+
+`doReleaseShared` 是实现传播唤醒机制的核心方法。`AQS`通过一个双向链表（同步队列）管理等待锁的线程节点（`Node`）。共享锁（如`ReentrantReadWriteLock`的读锁）允许多个线程同时持有锁，因此释放共享锁时需要唤醒多个后续共享节点，而非像独占锁（如`ReentrantLock`）仅唤醒一个节点。
+
+独占锁释放（如`ReentrantLock`的`release`方法）通过`unparkSuccessor`唤醒单个后继节点，而共享锁释放（`doReleaseShared`）通过循环和`PROPAGATE`状态唤醒多个后续共享节点，确保共享模式下多线程的并发获取能力。
+
+```java
+private void doReleaseShared() {  // 共享模式下释放锁的传播唤醒方法
+    /*
+     * 设计目标：确保释放操作的传播性，即使存在并发的获取/释放操作。
+     * 核心逻辑：循环检查头节点状态，若需唤醒则执行unparkSuccessor；若无需唤醒但状态为0，则标记为PROPAGATE以保证后续传播。
+     */
+     
+    // 步骤1：无限循环处理，直到头节点未变化时退出
+    for (;;) {
+        Node h = head;  // 获取当前同步队列的头节点（虚拟头节点，不存储实际线程）
+
+        // 步骤2：头节点存在且不是尾节点（队列中至少有一个实际等待节点）
+        if (h != null && h != tail) {
+            int ws = h.waitStatus;  // 获取头节点的等待状态（Node的waitStatus字段）
+
+            // 分支1：头节点状态为SIGNAL（表示后继节点需要被唤醒）
+            if (ws == Node.SIGNAL) {
+                // 尝试CAS将头节点状态从SIGNAL重置为0（避免并发干扰）
+                if (!compareAndSetWaitStatus(h, Node.SIGNAL, 0))
+                    continue;  // CAS失败（被其他线程修改），重试循环
+                unparkSuccessor(h);  // 唤醒头节点的后继节点（实际等待线程）
+            }
+
+            // 分支2：头节点状态为0（无等待唤醒需求），尝试标记为PROPAGATE
+            else if (ws == 0 &&
+                     !compareAndSetWaitStatus(h, 0, Node.PROPAGATE))
+                continue;  // CAS失败（被其他线程修改），重试循环
+        }
+
+        // 步骤3：退出循环条件 - 头节点未被其他线程修改（h == head说明当前循环处理有效，无需继续）
+        if (h == head)
+            break;
+    }
+}
+```
+
+- **步骤1**：无限循环的作用，通过 `for (;;)` 无限循环处理头节点状态，确保以下两种情况被覆盖：
+    - 并发修改头节点：当多个线程同时释放共享锁时，头节点可能被其他线程修改（如`acquireShared`成功后更新头节点），需要重试以保证一致性
+    - 传播唤醒需求：即使当前头节点无需唤醒，标记为`PROPAGATE`后，后续释放操作仍可通过该状态继续传播唤醒
+- **步骤2**：头节点状态的处理，头节点的 `waitStatus` 字段是核心状态标识，影响唤醒逻辑：
+    - `Node.SIGNAL`（值为-1）：表示头节点的后继节点被阻塞（`park`），需要被唤醒。此时通过 `unparkSuccessor(h)` 唤醒后继线程，使其尝试获取共享锁
+    - `Node.PROPAGATE`（值为-3）：标记共享锁的释放需要传播到后续节点。当多个共享锁同时释放时，该状态确保即使当前头节点无直接后继需要唤醒，后续释放操作仍会继续检查并唤醒更多节点
+    - `状态为0`：头节点无等待唤醒需求，但通过 `compareAndSetWaitStatus(h, 0, Node.PROPAGATE)` 标记为`PROPAGATE`，为后续可能的共享锁释放保留传播能力
+- **CAS操作的必要性**：`compareAndSetWaitStatus（CAS）`是原子操作，用于确保多线程并发修改头节点状态时的线程安全。若CAS失败（说明状态被其他线程修改），则通过 `continue` 重试循环，重新获取最新的头节点状态
+- **步骤3**：退出循环的条件
+    - 当 `h == head` 时退出循环，说明当前循环处理的头节点未被其他线程修改，本次释放操作的传播逻辑已完成。若头节点被修改（如其他线程唤醒了新的节点并更新了头），则继续循环处理新的头节点
+
+
+
+.
+
+**设计意义：**
+`doReleaseShared` 的核心设计是共享锁的传播唤醒机制，通过以下两点保证高效并发：
+- **避免重复唤醒**：仅当头节点状态为`SIGNAL`时唤醒后继，避免无意义的`unpark`操作
+- **传播性保证**：通过`PROPAGATE`状态标记，确保多个共享锁释放时，唤醒操作能持续传播到后续所有共享节点（如读锁允许多个线程同时持有，需唤醒所有等待的读线程）
+
+
+.
+
+**下载下来自己打开浏览器操作一下：**
+
+* 如果只有读锁的情况下的变化：[ReentrantReadWriteLock 共享读锁流程详解.html](https://github.com/fkfengye/MyNotes/blob/main/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/file/ReentrantReadWriteLock%20%E5%85%B1%E4%BA%AB%E8%AF%BB%E9%94%81%E6%B5%81%E7%A8%8B%E8%AF%A6%E8%A7%A3.html)
+* 读写都有的情况下：[ReentrantReadWriteLock 读写锁流程详解.html](https://github.com/fkfengye/MyNotes/blob/main/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/file/ReentrantReadWriteLock%20%E8%AF%BB%E5%86%99%E9%94%81%E6%B5%81%E7%A8%8B%E8%AF%A6%E8%A7%A3.html)
+
+
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/f8a5347416f3427797a6cd6161c70cac.png#pic_center)
