@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTPS证书身份认证流程</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        h1 {
+            color: #1a2a6c;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+        .subtitle {
+            color: #555;
+            font-size: 1.2rem;
+        }
+        .flow-container {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+        .step {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            transition: transform 0.3s, box-shadow 0.3s;
+            border-left: 5px solid #1a2a6c;
+        }
+        .step:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+        .step-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .step-number {
+            background: #1a2a6c;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-right: 15px;
+        }
+        .step-title {
+            font-size: 1.5rem;
+            color: #1a2a6c;
+        }
+        .step-content {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .step-description {
+            flex: 1;
+            min-width: 300px;
+            line-height: 1.6;
+            font-size: 1.1rem;
+        }
+        .step-diagram {
+            flex: 1;
+            min-width: 300px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+        }
+        .diagram-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+        }
+        .icon {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+        .key {
+            color: #b21f1f;
+        }
+        .cert {
+            color: #1a2a6c;
+        }
+        .encrypted {
+            color: #fdbb2d;
+        }
+        .highlight {
+            background: #e3f2fd;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+        .certificate-details {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            border-left: 4px solid #1a2a6c;
+        }
+        .certificate-details h3 {
+            margin-bottom: 10px;
+            color: #1a2a6c;
+        }
+        .certificate-details ul {
+            padding-left: 20px;
+        }
+        .certificate-details li {
+            margin: 8px 0;
+        }
+        footer {
+            margin-top: 40px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9rem;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        @media (max-width: 768px) {
+            .step-content {
+                flex-direction: column;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HTTPS证书身份认证流程</h1>
+            <p class="subtitle">深入理解SSL/TLS如何通过数字证书验证服务器身份并建立安全连接</p>
+        </header>
+        
+        <div class="flow-container">
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <h2 class="step-title">客户端发起HTTPS连接请求</h2>
+                </div>
+                <div class="step-content">
+                    <div class="step-description">
+                        <p>当用户在浏览器中输入一个HTTPS网址（如 https://example.com）时，浏览器会向服务器发起连接请求。</p>
+                        <p>这个请求包含以下重要信息：</p>
+                        <ul>
+                            <li>支持的SSL/TLS版本</li>
+                            <li>支持的加密算法列表（密码套件）</li>
+                            <li>客户端随机数（用于后续密钥生成）</li>
+                            <li>会话ID（如果尝试恢复现有会话）</li>
+                        </ul>
+                    </div>
+                    <div class="step-diagram">
+                        <div class="diagram-item">
+                            <span class="icon">🌐</span>
+                            <span>浏览器 → 服务器: ClientHello</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🔢</span>
+                            <span>SSL/TLS版本: TLS 1.2/1.3</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🔐</span>
+                            <span>密码套件列表</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🎲</span>
+                            <span>客户端随机数</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <h2 class="step-title">服务器响应并发送证书</h2>
+                </div>
+                <div class="step-content">
+                    <div class="step-description">
+                        <p>服务器收到请求后，选择双方都支持的SSL/TLS版本和加密算法，并向客户端发送以下信息：</p>
+                        <ul>
+                            <li>服务器数字证书（包含公钥）</li>
+                            <li>服务器随机数（用于后续密钥生成）</li>
+                            <li>选定的加密算法</li>
+                            <li>会话ID（用于会话恢复）</li>
+                        </ul>
+                        <p>服务器证书是由可信的证书颁发机构（CA）签发的，用于证明服务器的身份。</p>
+                    </div>
+                    <div class="step-diagram">
+                        <div class="diagram-item">
+                            <span class="icon">🖥️</span>
+                            <span>服务器 → 浏览器: ServerHello</span>
+                        </div>
+                        <div class="diagram-item cert">
+                            <span class="icon">📜</span>
+                            <span>服务器数字证书</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🎲</span>
+                            <span>服务器随机数</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🔐</span>
+                            <span>选定的密码套件</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <h2 class="step-title">客户端验证证书</h2>
+                </div>
+                <div class="step-content">
+                    <div class="step-description">
+                        <p>浏览器收到服务器证书后，会执行严格的验证过程：</p>
+                        <ul>
+                            <li><span class="highlight">验证证书链</span>：检查证书是否由可信的CA签发</li>
+                            <li><span class="highlight">验证有效期</span>：确保证书在有效期内</li>
+                            <li><span class="highlight">验证域名</span>：确保证书中的域名与访问的域名匹配</li>
+                            <li><span class="highlight">验证吊销状态</span>：检查证书是否已被吊销（通过CRL或OCSP）</li>
+                        </ul>
+                        <p>如果任何一项验证失败，浏览器会显示安全警告，阻止用户继续访问。</p>
+                    </div>
+                    <div class="step-diagram">
+                        <div class="diagram-item">
+                            <span class="icon">✅</span>
+                            <span>验证证书链</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">📅</span>
+                            <span>检查有效期</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🌐</span>
+                            <span>验证域名匹配</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🔍</span>
+                            <span>检查吊销状态</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🔑</span>
+                            <span>提取服务器公钥</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <h2 class="step-title">密钥交换与加密通信</h2>
+                </div>
+                <div class="step-content">
+                    <div class="step-description">
+                        <p>证书验证通过后，客户端生成一个<span class="highlight">预主密钥</span>，并使用服务器的公钥进行加密，发送给服务器。</p>
+                        <p>服务器使用自己的私钥解密预主密钥，然后客户端和服务器使用预主密钥、客户端随机数和服务器随机数生成相同的<span class="highlight">会话密钥</span>。</p>
+                        <p>此后，所有通信都使用这个会话密钥进行对称加密，确保数据传输的机密性和完整性。</p>
+                    </div>
+                    <div class="step-diagram">
+                        <div class="diagram-item">
+                            <span class="icon">🌐</span>
+                            <span>浏览器生成预主密钥</span>
+                        </div>
+                        <div class="diagram-item encrypted">
+                            <span class="icon">🔒</span>
+                            <span>用服务器公钥加密预主密钥</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🖥️</span>
+                            <span>服务器用私钥解密预主密钥</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🔑</span>
+                            <span>双方生成相同的会话密钥</span>
+                        </div>
+                        <div class="diagram-item encrypted">
+                            <span class="icon">🔐</span>
+                            <span>开始加密通信</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">5</div>
+                    <h2 class="step-title">安全数据传输</h2>
+                </div>
+                <div class="step-content">
+                    <div class="step-description">
+                        <p>一旦安全通道建立，客户端和服务器之间的所有通信都使用会话密钥进行加密。</p>
+                        <p>这种加密通信提供：</p>
+                        <ul>
+                            <li><span class="highlight">机密性</span>：只有持有会话密钥的双方可以解密数据</li>
+                            <li><span class="highlight">完整性</span>：使用MAC（消息认证码）防止数据被篡改</li>
+                            <li><span class="highlight">身份验证</span>：确保通信对方是经过验证的服务器</li>
+                        </ul>
+                        <p>浏览器地址栏会显示锁形图标，表示连接是安全的。</p>
+                    </div>
+                    <div class="step-diagram">
+                        <div class="diagram-item encrypted">
+                            <span class="icon">🔒</span>
+                            <span>请求数据 → 加密 → 传输</span>
+                        </div>
+                        <div class="diagram-item encrypted">
+                            <span class="icon">🔒</span>
+                            <span>响应数据 → 加密 → 传输</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">🔓</span>
+                            <span>接收方解密数据</span>
+                        </div>
+                        <div class="diagram-item">
+                            <span class="icon">✅</span>
+                            <span>验证数据完整性</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="certificate-details">
+                <h3>数字证书包含的关键信息：</h3>
+                <ul>
+                    <li><strong>主题</strong>：证书持有者的信息（如域名、组织名称）</li>
+                    <li><strong>颁发者</strong>：签发证书的证书颁发机构（CA）</li>
+                    <li><strong>有效期</strong>：证书的生效日期和过期日期</li>
+                    <li><strong>公钥</strong>：服务器的公钥，用于加密通信</li>
+                    <li><strong>数字签名</strong>：CA对证书内容的签名，用于验证证书的真实性</li>
+                    <li><strong>扩展信息</strong>：如密钥用法、增强型密钥用法等</li>
+                </ul>
+            </div>
+        </div>
+        
+        <footer>
+            <p>HTTPS证书身份认证流程示意图 | 展示了SSL/TLS握手过程中证书验证的关键步骤</p>
+        </footer>
+    </div>
+</body>
+</html>

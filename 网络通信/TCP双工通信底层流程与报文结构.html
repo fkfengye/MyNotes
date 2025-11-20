@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCP双工通信底层流程与报文结构</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            overflow: hidden;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        
+        h1 {
+            color: #1a2a6c;
+            margin-bottom: 15px;
+            font-size: 2.5rem;
+        }
+        
+        h2 {
+            color: #b21f1f;
+            margin: 25px 0 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        h3 {
+            color: #fdbb2d;
+            margin: 20px 0 10px;
+        }
+        
+        p {
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        
+        .intro {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            border-left: 5px solid #1a2a6c;
+        }
+        
+        .concept-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .concept-card {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .concept-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .communication-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 40px 0;
+        }
+        
+        .hosts {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 40px;
+        }
+        
+        .host {
+            width: 45%;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        
+        .host::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(to right, #1a2a6c, #b21f1f);
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .host-title {
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #1a2a6c;
+        }
+        
+        .buffer {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px dashed #ccc;
+        }
+        
+        .buffer-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #1a2a6c;
+        }
+        
+        .buffer-content {
+            min-height: 80px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        
+        .data-segment {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #1a2a6c;
+            color: white;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .data-segment.sent {
+            background-color: #28a745;
+        }
+        
+        .data-segment.acked {
+            background-color: #17a2b8;
+        }
+        
+        .data-segment.received {
+            background-color: #ffc107;
+            color: #333;
+        }
+        
+        .timeline {
+            width: 100%;
+            position: relative;
+            margin: 30px 0;
+        }
+        
+        .connection-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #1a2a6c, transparent);
+            z-index: 1;
+        }
+        
+        .data-flow {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #b21f1f;
+            top: calc(50% - 10px);
+            animation: flow 3s linear infinite;
+        }
+        
+        .data-flow.reversed {
+            background-color: #fdbb2d;
+            animation: flow-reverse 3s linear infinite;
+        }
+        
+        @keyframes flow {
+            0% { left: 25%; }
+            100% { left: 75%; }
+        }
+        
+        @keyframes flow-reverse {
+            0% { left: 75%; }
+            100% { left: 25%; }
+        }
+        
+        .packet-structure {
+            background-color: #f0f4f8;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+        
+        .packet-header {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .packet-field {
+            flex: 1;
+            min-width: 120px;
+            background: white;
+            border-radius: 5px;
+            padding: 10px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .packet-field .field-name {
+            font-weight: bold;
+            color: #1a2a6c;
+            margin-bottom: 5px;
+        }
+        
+        .packet-field .field-value {
+            font-family: 'Courier New', monospace;
+            color: #b21f1f;
+        }
+        
+        .packet-data {
+            background: white;
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .packet-data .data-content {
+            font-family: 'Courier New', monospace;
+            color: #333;
+            word-break: break-all;
+        }
+        
+        .seq-ack-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .seq-ack-table th, .seq-ack-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .seq-ack-table th {
+            background-color: #1a2a6c;
+            color: white;
+        }
+        
+        .seq-ack-table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        
+        .seq-ack-table tr:hover {
+            background-color: #e9ecef;
+        }
+        
+        .key-points {
+            background-color: #e8f4fd;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 30px 0;
+            border-left: 5px solid #17a2b8;
+        }
+        
+        .key-points ul {
+            padding-left: 20px;
+        }
+        
+        .key-points li {
+            margin-bottom: 10px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            background: #1a2a6c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #2a3a8c;
+            transform: translateY(-3px);
+        }
+        
+        .btn-reset {
+            background: #b21f1f;
+        }
+        
+        .btn-reset:hover {
+            background: #c23f3f;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #6c757d;
+        }
+        
+        @media (max-width: 768px) {
+            .hosts {
+                flex-direction: column;
+            }
+            
+            .host {
+                width: 100%;
+                margin-bottom: 30px;
+            }
+            
+            .concept-card {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>TCP双工通信底层流程与报文结构</h1>
+            <p>深入理解TCP全双工通信的实现机制</p>
+        </header>
+        
+        <section class="intro">
+            <h2>TCP双工通信概述</h2>
+            <p>TCP（传输控制协议）是一种面向连接的、可靠的、基于字节流的传输层通信协议。其"全双工"特性允许通信双方同时发送和接收数据。</p>
+            <p>TCP的双工通信并非通过两个独立的物理通道实现，而是通过<strong>逻辑上独立的发送和接收缓冲区</strong>、<strong>序列号和确认机制</strong>以及<strong>滑动窗口协议</strong>在单一物理通道上实现的。</p>
+        </section>
+        
+        <section>
+            <h2>TCP双工通信核心概念</h2>
+            <div class="concept-section">
+                <div class="concept-card">
+                    <h3>📡 发送与接收缓冲区</h3>
+                    <p>每个TCP连接端点都维护两个独立的缓冲区：</p>
+                    <ul>
+                        <li><strong>发送缓冲区</strong>：存储待发送的数据</li>
+                        <li><strong>接收缓冲区</strong>：存储已接收但尚未被应用层读取的数据</li>
+                    </ul>
+                    <p>这两个缓冲区允许TCP端点同时处理发送和接收操作，互不干扰。</p>
+                </div>
+                
+                <div class="concept-card">
+                    <h3>🔢 序列号与确认机制</h3>
+                    <p>TCP为每个字节分配一个序列号，接收方通过确认号告知发送方已成功接收的数据。</p>
+                    <p>每个TCP段包含：</p>
+                    <ul>
+                        <li><strong>序列号</strong>：标识该段中第一个字节的序号</li>
+                        <li><strong>确认号</strong>：期望收到的下一个字节的序号</li>
+                    </ul>
+                </div>
+                
+                <div class="concept-card">
+                    <h3>🪟 滑动窗口协议</h3>
+                    <p>TCP使用滑动窗口机制实现流量控制和可靠传输：</p>
+                    <ul>
+                        <li><strong>发送窗口</strong>：已发送但尚未确认的数据范围</li>
+                        <li><strong>接收窗口</strong>：可接收的数据范围</li>
+                    </ul>
+                    <p>窗口大小动态调整，平衡传输效率与网络拥塞。</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="communication-container">
+            <h2>TCP双工通信流程</h2>
+            
+            <div class="hosts">
+                <div class="host">
+                    <div class="host-title">主机A</div>
+                    <div class="buffer">
+                        <div class="buffer-title">发送缓冲区</div>
+                        <div class="buffer-content" id="host-a-send-buffer">
+                            <div class="data-segment">A1</div>
+                            <div class="data-segment">A2</div>
+                            <div class="data-segment">A3</div>
+                            <div class="data-segment">A4</div>
+                            <div class="data-segment">A5</div>
+                        </div>
+                    </div>
+                    <div class="buffer">
+                        <div class="buffer-title">接收缓冲区</div>
+                        <div class="buffer-content" id="host-a-recv-buffer">
+                            <!-- 接收的数据将动态添加 -->
+                        </div>
+                    </div>
+                    <div class="seq-info">
+                        <p><strong>序列号:</strong> <span id="host-a-seq">1000</span></p>
+                        <p><strong>确认号:</strong> <span id="host-a-ack">5000</span></p>
+                    </div>
+                </div>
+                
+                <div class="host">
+                    <div class="host-title">主机B</div>
+                    <div class="buffer">
+                        <div class="buffer-title">发送缓冲区</div>
+                        <div class="buffer-content" id="host-b-send-buffer">
+                            <div class="data-segment">B1</div>
+                            <div class="data-segment">B2</div>
+                            <div class="data-segment">B3</div>
+                            <div class="data-segment">B4</div>
+                            <div class="data-segment">B5</div>
+                        </div>
+                    </div>
+                    <div class="buffer">
+                        <div class="buffer-title">接收缓冲区</div>
+                        <div class="buffer-content" id="host-b-recv-buffer">
+                            <!-- 接收的数据将动态添加 -->
+                        </div>
+                    </div>
+                    <div class="seq-info">
+                        <p><strong>序列号:</strong> <span id="host-b-seq">5000</span></p>
+                        <p><strong>确认号:</strong> <span id="host-b-ack">1000</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="timeline">
+                <div class="connection-line"></div>
+                <div class="data-flow" id="flow-a-to-b"></div>
+                <div class="data-flow reversed" id="flow-b-to-a"></div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn" id="btn-start">开始演示</button>
+                <button class="btn btn-reset" id="btn-reset">重置</button>
+            </div>
+        </section>
+        
+        <section>
+            <h2>TCP报文结构</h2>
+            <div class="packet-structure">
+                <h3>TCP报文段格式</h3>
+                
+                <div class="packet-header">
+                    <div class="packet-field">
+                        <div class="field-name">源端口</div>
+                        <div class="field-value" id="src-port">54321</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">目标端口</div>
+                        <div class="field-value" id="dst-port">80</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">序列号</div>
+                        <div class="field-value" id="seq-num">1000</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">确认号</div>
+                        <div class="field-value" id="ack-num">5000</div>
+                    </div>
+                </div>
+                
+                <div class="packet-header">
+                    <div class="packet-field">
+                        <div class="field-name">数据偏移</div>
+                        <div class="field-value">5 (20字节)</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">保留</div>
+                        <div class="field-value">000000</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">控制标志</div>
+                        <div class="field-value" id="flags">ACK=1</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">窗口大小</div>
+                        <div class="field-value" id="window">65535</div>
+                    </div>
+                </div>
+                
+                <div class="packet-header">
+                    <div class="packet-field">
+                        <div class="field-name">校验和</div>
+                        <div class="field-value">0x7A3B</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">紧急指针</div>
+                        <div class="field-value">0</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">选项</div>
+                        <div class="field-value">MSS=1460</div>
+                    </div>
+                    <div class="packet-field">
+                        <div class="field-name">填充</div>
+                        <div class="field-value">0000</div>
+                    </div>
+                </div>
+                
+                <div class="packet-data">
+                    <div class="field-name">数据</div>
+                    <div class="data-content" id="packet-data">Hello from Host A!</div>
+                </div>
+            </div>
+            
+            <p>TCP报文段包含20字节的固定头部和可选的数据部分。每个TCP连接端点维护独立的序列号和确认号，使得双向通信可以独立进行。</p>
+        </section>
+        
+        <section>
+            <h2>双向数据传输示例</h2>
+            <p>下表展示了TCP双工通信中双向数据传输的序列号和确认号变化：</p>
+            
+            <table class="seq-ack-table">
+                <thead>
+                    <tr>
+                        <th>步骤</th>
+                        <th>方向</th>
+                        <th>数据</th>
+                        <th>序列号</th>
+                        <th>确认号</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>A→B</td>
+                        <td>"Hello" (5字节)</td>
+                        <td>1000</td>
+                        <td>5000</td>
+                        <td>A发送数据给B</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>B→A</td>
+                        <td>"Hi" (2字节)</td>
+                        <td>5000</td>
+                        <td>1005</td>
+                        <td>B发送数据给A，同时确认收到A的数据</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td>A→B</td>
+                        <td>"How are you?" (11字节)</td>
+                        <td>1005</td>
+                        <td>5002</td>
+                        <td>A发送数据给B，同时确认收到B的数据</td>
+                    </tr>
+                    <tr>
+                        <td>4</td>
+                        <td>B→A</td>
+                        <td>"Fine, thanks" (12字节)</td>
+                        <td>5002</td>
+                        <td>1016</td>
+                        <td>B发送数据给A，同时确认收到A的数据</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <p>从表中可以看出，每个方向上的序列号独立增长，而确认号则用于确认从另一个方向接收到的数据。</p>
+        </section>
+        
+        <section class="key-points">
+            <h2>TCP双工通信关键要点</h2>
+            <ul>
+                <li><strong>逻辑独立而非物理独立</strong>：TCP双工通信不是两个物理通道，而是在单一物理通道上通过协议机制实现逻辑上的双向独立通信。</li>
+                <li><strong>独立的缓冲区是关键</strong>：每个TCP端点维护独立的发送和接收缓冲区，使得发送和接收操作可以同时进行。</li>
+                <li><strong>序列号和确认机制保障可靠性</strong>：每个数据字节都有序列号，接收方通过确认号告知成功接收的数据。</li>
+                <li><strong>滑动窗口实现流量控制</strong>：动态调整窗口大小，平衡传输效率与网络状况。</li>
+                <li><strong>数据段可以携带确认信息</strong>：TCP段可以同时携带数据和确认信息，提高协议效率。</li>
+                <li><strong>全双工优势</strong>：双向独立通信提高了带宽利用率，减少了通信延迟。</li>
+            </ul>
+        </section>
+        
+        <footer>
+            <p>TCP双工通信底层流程与报文结构 | 理解网络协议底层实现</p>
+            <p>© 2023 网络技术教育可视化</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const hostASendBuffer = document.getElementById('host-a-send-buffer');
+            const hostARecvBuffer = document.getElementById('host-a-recv-buffer');
+            const hostBSendBuffer = document.getElementById('host-b-send-buffer');
+            const hostBRecvBuffer = document.getElementById('host-b-recv-buffer');
+            
+            const hostASeq = document.getElementById('host-a-seq');
+            const hostAAck = document.getElementById('host-a-ack');
+            const hostBSeq = document.getElementById('host-b-seq');
+            const hostBAck = document.getElementById('host-b-ack');
+            
+            const flowAToB = document.getElementById('flow-a-to-b');
+            const flowBToA = document.getElementById('flow-b-to-a');
+            
+            const srcPort = document.getElementById('src-port');
+            const dstPort = document.getElementById('dst-port');
+            const seqNum = document.getElementById('seq-num');
+            const ackNum = document.getElementById('ack-num');
+            const flags = document.getElementById('flags');
+            const window = document.getElementById('window');
+            const packetData = document.getElementById('packet-data');
+            
+            const btnStart = document.getElementById('btn-start');
+            const btnReset = document.getElementById('btn-reset');
+            
+            let aSeq = 1000;
+            let aAck = 5000;
+            let bSeq = 5000;
+            let bAck = 1000;
+            
+            // 开始演示
+            btnStart.addEventListener('click', function() {
+                // 重置状态
+                resetStates();
+                
+                // 第一步: A发送数据给B
+                setTimeout(() => {
+                    updatePacketInfo(54321, 80, aSeq, aAck, "ACK=1", 65535, "Hello from Host A!");
+                    flowAToB.style.display = 'block';
+                    
+                    // 移动数据段
+                    const dataSegment = hostASendBuffer.querySelector('.data-segment');
+                    dataSegment.classList.add('sent');
+                    
+                    // 更新序列号
+                    aSeq += 5; // "Hello" 5个字节
+                    hostASeq.textContent = aSeq;
+                }, 1000);
+                
+                // 第二步: B接收数据并发送响应
+                setTimeout(() => {
+                    flowAToB.style.display = 'none';
+                    
+                    // B接收数据
+                    const receivedSegment = document.createElement('div');
+                    receivedSegment.className = 'data-segment received';
+                    receivedSegment.textContent = 'A1';
+                    hostBRecvBuffer.appendChild(receivedSegment);
+                    
+                    // 更新B的确认号
+                    bAck = aSeq;
+                    hostBAck.textContent = bAck;
+                    
+                    // B发送响应
+                    updatePacketInfo(80, 54321, bSeq, bAck, "ACK=1", 65535, "Hi from Host B!");
+                    flowBToA.style.display = 'block';
+                    
+                    // 移动数据段
+                    const dataSegment = hostBSendBuffer.querySelector('.data-segment');
+                    dataSegment.classList.add('sent');
+                    
+                    // 更新序列号
+                    bSeq += 2; // "Hi" 2个字节
+                    hostBSeq.textContent = bSeq;
+                }, 2500);
+                
+                // 第三步: A接收数据并发送响应
+                setTimeout(() => {
+                    flowBToA.style.display = 'none';
+                    
+                    // A接收数据
+                    const receivedSegment = document.createElement('div');
+                    receivedSegment.className = 'data-segment received';
+                    receivedSegment.textContent = 'B1';
+                    hostARecvBuffer.appendChild(receivedSegment);
+                    
+                    // 更新A的确认号
+                    aAck = bSeq;
+                    hostAAck.textContent = aAck;
+                    
+                    // A发送响应
+                    updatePacketInfo(54321, 80, aSeq, aAck, "ACK=1", 65535, "How are you?");
+                    flowAToB.style.display = 'block';
+                    
+                    // 移动数据段
+                    const dataSegments = hostASendBuffer.querySelectorAll('.data-segment');
+                    if (dataSegments.length > 1) {
+                        dataSegments[1].classList.add('sent');
+                    }
+                    
+                    // 更新序列号
+                    aSeq += 11; // "How are you?" 11个字节
+                    hostASeq.textContent = aSeq;
+                }, 4000);
+                
+                // 第四步: B接收数据并发送响应
+                setTimeout(() => {
+                    flowAToB.style.display = 'none';
+                    
+                    // B接收数据
+                    const receivedSegment = document.createElement('div');
+                    receivedSegment.className = 'data-segment received';
+                    receivedSegment.textContent = 'A2';
+                    hostBRecvBuffer.appendChild(receivedSegment);
+                    
+                    // 更新B的确认号
+                    bAck = aSeq;
+                    hostBAck.textContent = bAck;
+                    
+                    // B发送响应
+                    updatePacketInfo(80, 54321, bSeq, bAck, "ACK=1", 65535, "Fine, thanks!");
+                    flowBToA.style.display = 'block';
+                    
+                    // 移动数据段
+                    const dataSegments = hostBSendBuffer.querySelectorAll('.data-segment');
+                    if (dataSegments.length > 1) {
+                        dataSegments[1].classList.add('sent');
+                    }
+                    
+                    // 更新序列号
+                    bSeq += 12; // "Fine, thanks!" 12个字节
+                    hostBSeq.textContent = bSeq;
+                }, 5500);
+                
+                // 第五步: A接收数据
+                setTimeout(() => {
+                    flowBToA.style.display = 'none';
+                    
+                    // A接收数据
+                    const receivedSegment = document.createElement('div');
+                    receivedSegment.className = 'data-segment received';
+                    receivedSegment.textContent = 'B2';
+                    hostARecvBuffer.appendChild(receivedSegment);
+                    
+                    // 更新A的确认号
+                    aAck = bSeq;
+                    hostAAck.textContent = aAck;
+                }, 7000);
+            });
+            
+            // 重置
+            btnReset.addEventListener('click', resetStates);
+            
+            function resetStates() {
+                // 重置缓冲区
+                hostASendBuffer.innerHTML = `
+                    <div class="data-segment">A1</div>
+                    <div class="data-segment">A2</div>
+                    <div class="data-segment">A3</div>
+                    <div class="data-segment">A4</div>
+                    <div class="data-segment">A5</div>
+                `;
+                
+                hostARecvBuffer.innerHTML = '';
+                
+                hostBSendBuffer.innerHTML = `
+                    <div class="data-segment">B1</div>
+                    <div class="data-segment">B2</div>
+                    <div class="data-segment">B3</div>
+                    <div class="data-segment">B4</div>
+                    <div class="data-segment">B5</div>
+                `;
+                
+                hostBRecvBuffer.innerHTML = '';
+                
+                // 重置序列号和确认号
+                aSeq = 1000;
+                aAck = 5000;
+                bSeq = 5000;
+                bAck = 1000;
+                
+                hostASeq.textContent = aSeq;
+                hostAAck.textContent = aAck;
+                hostBSeq.textContent = bSeq;
+                hostBAck.textContent = bAck;
+                
+                // 隐藏数据流
+                flowAToB.style.display = 'none';
+                flowBToA.style.display = 'none';
+                
+                // 重置报文信息
+                updatePacketInfo(54321, 80, aSeq, aAck, "ACK=1", 65535, "Hello from Host A!");
+            }
+            
+            function updatePacketInfo(src, dst, seq, ack, flag, win, data) {
+                srcPort.textContent = src;
+                dstPort.textContent = dst;
+                seqNum.textContent = seq;
+                ackNum.textContent = ack;
+                flags.textContent = flag;
+                window.textContent = win;
+                packetData.textContent = data;
+            }
+            
+            // 初始化
+            resetStates();
+        });
+    </script>
+</body>
+</html>

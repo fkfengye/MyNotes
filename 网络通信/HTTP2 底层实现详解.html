@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP/2 底层实现详解</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #2a5298);
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.97);
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        header {
+            background: linear-gradient(90deg, #2c3e50, #34495e);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 30px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .card h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .flow-container {
+            grid-column: 1 / -1;
+        }
+        .flow-diagram {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px 0;
+            border: 1px solid #e1e5e9;
+        }
+        .flow-step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+        }
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: #3498db;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+        .step-content {
+            flex: 1;
+        }
+        .step-content h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .arrow {
+            text-align: center;
+            font-size: 24px;
+            color: #7f8c8d;
+            margin: 10px 0;
+        }
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+            overflow-x: auto;
+            font-size: 0.9rem;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .comparison-table th, .comparison-table td {
+            border: 1px solid #dee2e6;
+            padding: 12px;
+            text-align: left;
+        }
+        .comparison-table th {
+            background-color: #3498db;
+            color: white;
+        }
+        .comparison-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .feature-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px dashed #dee2e6;
+            position: relative;
+            padding-left: 30px;
+        }
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #28a745;
+            font-weight: bold;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .frame-type {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            color: white;
+            font-size: 0.8rem;
+            margin-right: 5px;
+        }
+        .frame-headers { background: #e74c3c; }
+        .frame-data { background: #3498db; }
+        .frame-settings { background: #2ecc71; }
+        .frame-window-update { background: #9b59b6; }
+        .frame-priority { background: #f39c12; }
+        .frame-rst-stream { background: #e67e22; }
+        .frame-ping { background: #1abc9c; }
+        .frame-goaway { background: #34495e; }
+        .frame-push-promise { background: #d35400; }
+        footer {
+            text-align: center;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HTTP/2 底层实现详解</h1>
+            <p class="subtitle">二进制分帧、多路复用、头部压缩与服务器推送机制</p>
+        </header>
+
+        <div class="content">
+            <div class="card">
+                <h2>HTTP/2 核心特性</h2>
+                <ul class="feature-list">
+                    <li><span class="highlight">二进制分帧</span> - 替代HTTP/1.x的文本格式</li>
+                    <li><span class="highlight">多路复用</span> - 单个连接并行处理多个请求</li>
+                    <li><span class="highlight">头部压缩</span> - HPACK算法减少头部大小</li>
+                    <li><span class="highlight">服务器推送</span> - 服务器主动推送资源</li>
+                    <li><span class="highlight">流优先级</span> - 智能分配带宽和资源</li>
+                    <li><span class="highlight">流量控制</span> - 基于流的流量控制机制</li>
+                </ul>
+                
+                <h3>HTTP/2 帧类型</h3>
+                <table class="comparison-table">
+                    <tr>
+                        <th>帧类型</th>
+                        <th>用途</th>
+                        <th>标识位</th>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-headers">HEADERS</span></td>
+                        <td>打开流，携带HTTP头部</td>
+                        <td>END_HEADERS, END_STREAM</td>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-data">DATA</span></td>
+                        <td>传输请求/响应体</td>
+                        <td>END_STREAM, PADDED</td>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-settings">SETTINGS</span></td>
+                        <td>协商连接参数</td>
+                        <td>ACK</td>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-window-update">WINDOW_UPDATE</span></td>
+                        <td>流量控制</td>
+                        <td>无</td>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-priority">PRIORITY</span></td>
+                        <td>设置流优先级</td>
+                        <td>无</td>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-rst-stream">RST_STREAM</span></td>
+                        <td>立即终止流</td>
+                        <td>无</td>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-ping">PING</span></td>
+                        <td>测量RTT和健康检查</td>
+                        <td>ACK</td>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-goaway">GOAWAY</span></td>
+                        <td>停止创建新流，关闭连接</td>
+                        <td>无</td>
+                    </tr>
+                    <tr>
+                        <td><span class="frame-type frame-push-promise">PUSH_PROMISE</span></td>
+                        <td>服务器推送资源</td>
+                        <td>END_HEADERS</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>HTTP/2 帧结构</h2>
+                <div class="code-block">
++-----------------------------------------------+
+|                 Length (24)                   |
++---------------+---------------+---------------+
+|   Type (8)    |   Flags (8)   |
++-+-------------+---------------+-------------------------------+
+|R|                 Stream Identifier (31)                      |
++=+=============================================================+
+|                   Frame Payload (0...)                      ...
++---------------------------------------------------------------+
+
+Length: 帧载荷长度 (24位，最大16MB)
+Type: 帧类型 (8位)
+Flags: 帧特定标识位 (8位)
+R: 保留位 (1位)
+Stream Identifier: 流标识符 (31位)
+Frame Payload: 帧有效载荷
+                </div>
+                
+                <h3>HPACK 头部压缩</h3>
+                <div class="code-block">
+// 静态表 - 预定义的61个常用头部字段
+static const struct {
+    const char *name;
+    const char *value;
+} static_table[] = {
+    {":authority", ""},
+    {":method", "GET"},
+    {":method", "POST"},
+    {":path", "/"},
+    {":path", "/index.html"},
+    {":scheme", "http"},
+    {":scheme", "https"},
+    // ... 更多预定义头部
+};
+
+// 动态表 - 维护在连接生命周期内
+// 编码器/解码器共同维护的动态头部字段表
+                </div>
+                
+                <h3>流状态机</h3>
+                <div class="code-block">
+idle → [HEADERS] → open → [DATA/HEADERS] → half-closed (local/remote)
+    ↓                   ↓
+    [PUSH_PROMISE]      [RST_STREAM]
+    ↓                   ↓
+reserved (remote)     closed
+                </div>
+            </div>
+
+            <div class="card flow-container">
+                <h2>HTTP/2 连接建立与请求处理流程</h2>
+                
+                <div class="flow-diagram">
+                    <h3>1. 连接建立与协商</h3>
+                    <div class="flow-step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h3>TLS握手与ALPN协商</h3>
+                            <p>客户端通过TLS握手，使用ALPN(Application-Layer Protocol Negotiation)扩展协商使用HTTP/2</p>
+                            <div class="code-block">
+// TLS ClientHello包含ALPN扩展
+ClientHello {
+    extensions: {
+        application_layer_protocol_negotiation: ['h2', 'http/1.1']
+    }
+}
+
+// ServerHello确认使用HTTP/2
+ServerHello {
+    extensions: {
+        application_layer_protocol_negotiation: 'h2'
+    }
+}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow">↓</div>
+                    
+                    <div class="flow-step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h3>HTTP/2连接前言</h3>
+                            <p>客户端发送HTTP/2连接前言(PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n)确认协议升级</p>
+                            <div class="code-block">
+// 客户端发送连接前言
+CLIENT -> SERVER: "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
+// 随后立即发送SETTINGS帧
+CLIENT -> SERVER: SETTINGS帧
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow">↓</div>
+                    
+                    <div class="flow-step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h3>参数协商</h3>
+                            <p>双方交换SETTINGS帧协商连接参数，发送SETTINGS ACK确认</p>
+                            <div class="code-block">
+// 客户端SETTINGS帧示例
+SETTINGS帧 {
+    SETTINGS_HEADER_TABLE_SIZE: 4096,
+    SETTINGS_ENABLE_PUSH: 1,
+    SETTINGS_MAX_CONCURRENT_STREAMS: 100,
+    SETTINGS_INITIAL_WINDOW_SIZE: 65535,
+    SETTINGS_MAX_FRAME_SIZE: 16384
+}
+
+// 服务器响应SETTINGS ACK
+SERVER -> CLIENT: SETTINGS帧(ACK标志位)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-diagram">
+                    <h3>2. 请求/响应多路复用</h3>
+                    <div class="flow-step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <h3>客户端发送请求</h3>
+                            <p>客户端在单个连接上并行发送多个请求，每个请求使用不同的流ID</p>
+                            <div class="code-block">
+// 流1: 请求HTML页面
+CLIENT -> SERVER: HEADERS帧 {
+    stream_id: 1,
+    flags: END_HEADERS,
+    headers: [
+        ':method': 'GET',
+        ':path': '/index.html',
+        'authority': 'example.com'
+    ]
+}
+
+// 流3: 请求CSS文件 (与流1并行)
+CLIENT -> SERVER: HEADERS帧 {
+    stream_id: 3, 
+    flags: END_HEADERS,
+    headers: [
+        ':method': 'GET',
+        ':path': '/style.css',
+        'authority': 'example.com'
+    ]
+}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow">↓</div>
+                    
+                    <div class="flow-step">
+                        <div class="step-number">5</div>
+                        <div class="step-content">
+                            <h3>服务器处理与响应</h3>
+                            <p>服务器并行处理请求，响应帧可以交错发送</p>
+                            <div class="code-block">
+// 服务器交错发送响应帧
+SERVER -> CLIENT: HEADERS帧 {
+    stream_id: 1,
+    flags: END_HEADERS,
+    headers: [
+        ':status': '200',
+        'content-type': 'text/html'
+    ]
+}
+
+SERVER -> CLIENT: DATA帧 {
+    stream_id: 1,
+    data: "&lt;html&gt;...&lt;/html&gt;",
+    flags: END_STREAM
+}
+
+SERVER -> CLIENT: HEADERS帧 {
+    stream_id: 3,
+    flags: END_HEADERS, 
+    headers: [
+        ':status': '200',
+        'content-type': 'text/css'
+    ]
+}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow">↓</div>
+                    
+                    <div class="flow-step">
+                        <div class="step-number">6</div>
+                        <div class="step-content">
+                            <h3>流量控制</h3>
+                            <p>通过WINDOW_UPDATE帧动态调整流级别的流量控制</p>
+                            <div class="code-block">
+// 客户端接收数据后发送窗口更新
+CLIENT -> SERVER: WINDOW_UPDATE帧 {
+    stream_id: 1,
+    window_size_increment: 8192
+}
+
+// 连接级别的窗口更新
+CLIENT -> SERVER: WINDOW_UPDATE帧 {
+    stream_id: 0,  // 0表示连接级别
+    window_size_increment: 16384
+}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-diagram">
+                    <h3>3. 服务器推送</h3>
+                    <div class="flow-step">
+                        <div class="step-number">7</div>
+                        <div class="step-content">
+                            <h3>推送承诺</h3>
+                            <p>服务器在响应主资源时，主动推送相关资源</p>
+                            <div class="code-block">
+// 服务器推送CSS文件
+SERVER -> CLIENT: PUSH_PROMISE帧 {
+    stream_id: 1,  // 关联的主请求流
+    promised_stream_id: 2,
+    headers: [
+        ':method': 'GET',
+        ':path': '/style.css',
+        'authority': 'example.com'
+    ]
+}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow">↓</div>
+                    
+                    <div class="flow-step">
+                        <div class="step-number">8</div>
+                        <div class="step-content">
+                            <h3>推送资源传输</h3>
+                            <p>在承诺的流上发送推送的资源</p>
+                            <div class="code-block">
+// 在承诺的流2上发送推送的资源
+SERVER -> CLIENT: HEADERS帧 {
+    stream_id: 2,
+    flags: END_HEADERS,
+    headers: [
+        ':status': '200',
+        'content-type': 'text/css'
+    ]
+}
+
+SERVER -> CLIENT: DATA帧 {
+    stream_id: 2,
+    data: "body { color: blue; }",
+    flags: END_STREAM
+}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-diagram">
+                    <h3>4. 优先级与依赖关系</h3>
+                    <div class="flow-step">
+                        <div class="step-number">9</div>
+                        <div class="step-content">
+                            <h3>设置流优先级</h3>
+                            <p>客户端通过PRIORITY帧指定流的优先级和依赖关系</p>
+                            <div class="code-block">
+// 设置流3依赖于流1，权重为200
+CLIENT -> SERVER: PRIORITY帧 {
+    stream_id: 3,
+    exclusive: 0,
+    stream_dependency: 1,
+    weight: 200
+}
+
+// 权重范围: 1-256，默认16
+// 服务器根据依赖树和权重分配资源
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-diagram">
+                    <h3>5. 连接管理</h3>
+                    <div class="flow-step">
+                        <div class="step-number">10</div>
+                        <div class="step-content">
+                            <h3>连接保活与关闭</h3>
+                            <p>使用PING帧检测连接活性，GOAWAY帧优雅关闭连接</p>
+                            <div class="code-block">
+// 客户端发送PING帧检测连接
+CLIENT -> SERVER: PING帧 {
+    opaque_data: 0x1234567890ABCDEF
+}
+
+// 服务器响应PING
+SERVER -> CLIENT: PING帧 {
+    flags: ACK,
+    opaque_data: 0x1234567890ABCDEF
+}
+
+// 服务器优雅关闭连接
+SERVER -> CLIENT: GOAWAY帧 {
+    last_stream_id: 5,
+    error_code: NO_ERROR
+}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>HTTP/2 性能优化机制</h2>
+                <ul class="feature-list">
+                    <li><span class="highlight">消除队头阻塞</span> - 帧级别的多路复用</li>
+                    <li><span class="highlight">头部压缩</span> - HPACK减少85-90%头部大小</li>
+                    <li><span class="highlight">请求优先级</span> - 智能资源分配</li>
+                    <li><span class="highlight">服务器推送</span> - 减少往返次数</li>
+                    <li><span class="highlight">流量控制</span> - 防止接收方过载</li>
+                    <li><span class="highlight">连接复用</span> - 减少TCP握手开销</li>
+                </ul>
+                
+                <h3>与HTTP/1.x对比</h3>
+                <table class="comparison-table">
+                    <tr>
+                        <th>特性</th>
+                        <th>HTTP/1.1</th>
+                        <th>HTTP/2</th>
+                    </tr>
+                    <tr>
+                        <td>协议格式</td>
+                        <td>文本</td>
+                        <td>二进制</td>
+                    </tr>
+                    <tr>
+                        <td>多路复用</td>
+                        <td>需要多个TCP连接</td>
+                        <td>单个连接并行处理</td>
+                    </tr>
+                    <tr>
+                        <td>头部压缩</td>
+                        <td>无</td>
+                        <td>HPACK算法</td>
+                    </tr>
+                    <tr>
+                        <td>服务器推送</td>
+                        <td>不支持</td>
+                        <td>原生支持</td>
+                    </tr>
+                    <tr>
+                        <td>优先级</td>
+                        <td>有限支持</td>
+                        <td>精细控制</td>
+                    </tr>
+                    <tr>
+                        <td>流量控制</td>
+                        <td>TCP级别</td>
+                        <td>流级别</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>HTTP/2 实现要点</h2>
+                
+                <h3>帧处理状态机</h3>
+                <div class="code-block">
+// 简化的帧处理逻辑
+function processFrame(frame) {
+    switch(frame.type) {
+        case HEADERS:
+            if (frame.flags & END_HEADERS) {
+                processHeaders(frame);
+            }
+            if (frame.flags & END_STREAM) {
+                closeStream(frame.stream_id);
+            }
+            break;
+            
+        case DATA:
+            deliverData(frame.stream_id, frame.payload);
+            if (frame.flags & END_STREAM) {
+                closeStream(frame.stream_id);
+            }
+            break;
+            
+        case SETTINGS:
+            if (frame.flags & ACK) {
+                // 确认设置
+            } else {
+                updateSettings(frame.payload);
+                sendSettingsAck();
+            }
+            break;
+            
+        case WINDOW_UPDATE:
+            updateFlowControlWindow(frame);
+            break;
+            
+        // ... 处理其他帧类型
+    }
+}
+                </div>
+                
+                <h3>流管理</h3>
+                <div class="code-block">
+class Stream {
+    constructor(id, state = 'idle') {
+        this.id = id;
+        this.state = state;
+        this.headers = {};
+        this.data = [];
+        this.window_size = DEFAULT_WINDOW_SIZE;
+        this.priority = {};
+    }
+    
+    receiveHeaders(headers) {
+        this.headers = { ...this.headers, ...headers };
+        if (this.state === 'idle') {
+            this.state = 'open';
+        }
+    }
+    
+    receiveData(data) {
+        this.data.push(data);
+        // 更新流量控制窗口
+        this.window_size -= data.length;
+        if (this.window_size < THRESHOLD) {
+            sendWindowUpdate(this.id, WINDOW_INCREMENT);
+        }
+    }
+}
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>HTTP/2 底层实现深度解析 | 二进制分帧 · 多路复用 · 头部压缩 · 服务器推送</p>
+            <p>通过帧级别的并行处理和智能流量控制，HTTP/2显著提升了Web性能</p>
+        </footer>
+    </div>
+
+    <script>
+        // 添加交互效果
+        document.addEventListener('DOMContentLoaded', function() {
+            const codeBlocks = document.querySelectorAll('.code-block');
+            
+            codeBlocks.forEach(block => {
+                // 添加复制按钮
+                const copyButton = document.createElement('button');
+                copyButton.textContent = '复制';
+                copyButton.style.cssText = `
+                    position: absolute;
+                    right: 10px;
+                    top: 10px;
+                    background: #3498db;
+                    color: white;
+                    border: none;
+                    padding: 5px 10px;
+                    border-radius: 3px;
+                    cursor: pointer;
+                    font-size: 0.8rem;
+                `;
+                
+                block.style.position = 'relative';
+                block.appendChild(copyButton);
+                
+                copyButton.addEventListener('click', function() {
+                    const text = block.textContent.replace('复制', '').trim();
+                    navigator.clipboard.writeText(text).then(() => {
+                        const originalText = copyButton.textContent;
+                        copyButton.textContent = '已复制!';
+                        setTimeout(() => {
+                            copyButton.textContent = originalText;
+                        }, 2000);
+                    });
+                });
+            });
+            
+            // 高亮重要的技术术语
+            const highlights = document.querySelectorAll('.highlight');
+            highlights.forEach(highlight => {
+                highlight.addEventListener('mouseenter', function() {
+                    this.style.backgroundColor = '#ffeaa7';
+                });
+                highlight.addEventListener('mouseleave', function() {
+                    this.style.backgroundColor = '#fff3cd';
+                });
+            });
+            
+            // 帧类型标签点击效果
+            const frameTypes = document.querySelectorAll('.frame-type');
+            frameTypes.forEach(frame => {
+                frame.addEventListener('click', function() {
+                    const type = this.textContent.trim();
+                    alert(`帧类型: ${type}\n\n这是HTTP/2中的一种帧类型，用于特定的通信目的。`);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
