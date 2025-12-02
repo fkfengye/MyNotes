@@ -1,0 +1,252 @@
+<svg width="1600" height="1100" xmlns="http://www.w3.org/2000/svg">
+  <!-- 标题 -->
+  <text x="800" y="60" text-anchor="middle" font-size="28" font-weight="bold" fill="#333">主键大小对B+树高度的影响</text>
+  <text x="800" y="95" text-anchor="middle" font-size="16" fill="#666">16KB页大小下，8字节主键 vs 36字节UUID</text>
+  
+  <!-- 页面参数说明 -->
+  <rect x="100" y="120" width="1400" height="80" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="2"/>
+  <text x="800" y="150" text-anchor="middle" font-size="18" font-weight="bold" fill="#2d4cd2">计算前提</text>
+  <text x="800" y="175" text-anchor="middle" font-size="16">
+    页大小：<tspan font-weight="bold">16KB (16384字节)</tspan> | 
+    每个索引项 = 主键大小 + 指针(8字节)
+  </text>
+  
+  <!-- ========== 左侧：8字节主键（BIGINT）========== -->
+  <rect x="80" y="220" width="700" height="700" rx="8" ry="8" fill="#f8faff" stroke="#4a6bff" stroke-width="2"/>
+  <rect x="100" y="240" width="660" height="40" rx="4" ry="4" fill="#e6ecff"/>
+  <text x="430" y="265" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">8字节主键 (BIGINT/AUTO_INCREMENT)</text>
+  
+  <!-- 计算说明 -->
+  <rect x="120" y="290" width="620" height="80" rx="6" ry="6" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+  <text x="430" y="310" text-anchor="middle" font-size="16" font-weight="bold">计算过程</text>
+  <text x="430" y="335" text-anchor="middle" font-size="14">
+    每个索引项大小 = 8字节(主键) + 8字节(指针) = <tspan font-weight="bold" fill="#ff3366">16字节</tspan>
+  </text>
+  <text x="430" y="360" text-anchor="middle" font-size="14">
+    每个非叶子节点可存索引项 = 16KB ÷ 16字节 = <tspan font-weight="bold" fill="#ff3366">1024个</tspan>
+  </text>
+  
+  <!-- B+树结构 - 2层高度 -->
+  <text x="430" y="400" text-anchor="middle" font-size="18" font-weight="bold" fill="#333">B+树结构 (树高=2)</text>
+  
+  <!-- 根节点 -->
+  <g transform="translate(300, 420)">
+    <rect width="260" height="80" rx="8" ry="8" fill="#eef2ff" stroke="#4a6bff" stroke-width="3"/>
+    <text x="130" y="30" text-anchor="middle" font-size="16" font-weight="bold">根节点</text>
+    <text x="130" y="50" text-anchor="middle" font-size="14">(非叶子节点)</text>
+    <text x="130" y="68" text-anchor="middle" font-size="13" fill="#666">可存储1024个索引项</text>
+  </g>
+  
+  <!-- 连接线 -->
+  <path d="M430,500 L430,520" stroke="#4a6bff" stroke-width="2" fill="none"/>
+  <polygon points="430,520 425,515 435,515" fill="#4a6bff"/>
+  
+  <!-- 叶子节点层 -->
+  <rect x="120" y="530" width="620" height="60" fill="#f8f8f8" stroke="#ccc" stroke-width="1"/>
+  <text x="430" y="560" text-anchor="middle" font-size="16" font-weight="bold" fill="#666">叶子节点层 (存储实际数据)</text>
+  
+  <!-- 叶子节点示例 -->
+  <g transform="translate(150, 600)">
+    <!-- 叶子节点1 -->
+    <rect width="160" height="100" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="80" y="30" text-anchor="middle" font-size="14" font-weight="bold">叶子节点1</text>
+    <rect x="20" y="40" width="120" height="25" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="80" y="53" text-anchor="middle" font-size="11">存储多行数据</text>
+    <text x="80" y="78" text-anchor="middle" font-size="12">直接指向数据页</text>
+  </g>
+  
+  <g transform="translate(360, 600)">
+    <!-- 叶子节点2 -->
+    <rect width="160" height="100" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="80" y="30" text-anchor="middle" font-size="14" font-weight="bold">叶子节点2</text>
+    <rect x="20" y="40" width="120" height="25" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="80" y="53" text-anchor="middle" font-size="11">存储多行数据</text>
+    <text x="80" y="78" text-anchor="middle" font-size="12">直接指向数据页</text>
+  </g>
+  
+  <g transform="translate(570, 600)">
+    <!-- 叶子节点... -->
+    <rect width="160" height="100" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="80" y="30" text-anchor="middle" font-size="14" font-weight="bold">叶子节点...</text>
+    <rect x="20" y="40" width="120" height="25" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="80" y="53" text-anchor="middle" font-size="11">存储多行数据</text>
+    <text x="80" y="78" text-anchor="middle" font-size="12">直接指向数据页</text>
+  </g>
+  
+  <!-- 连接根节点到叶子节点 -->
+  <path d="M430,500 Q430,520 230,600" stroke="#4a6bff" stroke-width="1.5" fill="none"/>
+  <path d="M430,500 Q430,520 430,600" stroke="#4a6bff" stroke-width="1.5" fill="none"/>
+  <path d="M430,500 Q430,520 630,600" stroke="#4a6bff" stroke-width="1.5" fill="none"/>
+  
+  <!-- 叶子节点数量说明 -->
+  <rect x="150" y="720" width="580" height="80" rx="6" ry="6" fill="#f0f7ff" stroke="#4a6bff" stroke-width="1"/>
+  <text x="440" y="745" text-anchor="middle" font-size="14" font-weight="bold" fill="#2d4cd2">存储能力分析</text>
+  <text x="440" y="765" text-anchor="middle" font-size="13">
+    根节点可指向1024个叶子节点 × 每个叶子节点存储100行 ≈ <tspan font-weight="bold">102,400行</tspan>
+  </text>
+  <text x="440" y="785" text-anchor="middle" font-size="13">
+    若需存储1亿行数据：100,000,000 ÷ 102,400 ≈ 977 → 需要增加一层
+  </text>
+  
+  <!-- ========== 右侧：36字节UUID主键 ========== -->
+  <rect x="820" y="220" width="700" height="700" rx="8" ry="8" fill="#fff8f5" stroke="#ff8a3d" stroke-width="2"/>
+  <rect x="840" y="240" width="660" height="40" rx="4" ry="4" fill="#ffefe6"/>
+  <text x="1170" y="265" text-anchor="middle" font-size="20" font-weight="bold" fill="#cc5a1a">36字节主键 (UUID/GUID)</text>
+  
+  <!-- 计算说明 -->
+  <rect x="860" y="290" width="620" height="80" rx="6" ry="6" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+  <text x="1170" y="310" text-anchor="middle" font-size="16" font-weight="bold">计算过程</text>
+  <text x="1170" y="335" text-anchor="middle" font-size="14">
+    每个索引项大小 = 36字节(主键) + 8字节(指针) = <tspan font-weight="bold" fill="#ff3366">44字节</tspan>
+  </text>
+  <text x="1170" y="360" text-anchor="middle" font-size="14">
+    每个非叶子节点可存索引项 = 16KB ÷ 44字节 ≈ <tspan font-weight="bold" fill="#ff3366">372个</tspan>
+  </text>
+  
+  <!-- B+树结构 - 3层高度 -->
+  <text x="1170" y="400" text-anchor="middle" font-size="18" font-weight="bold" fill="#333">B+树结构 (树高=3)</text>
+  
+  <!-- 根节点 -->
+  <g transform="translate(1040, 420)">
+    <rect width="260" height="80" rx="8" ry="8" fill="#fff5f0" stroke="#ff8a3d" stroke-width="3"/>
+    <text x="130" y="30" text-anchor="middle" font-size="16" font-weight="bold">根节点</text>
+    <text x="130" y="50" text-anchor="middle" font-size="14">(非叶子节点)</text>
+    <text x="130" y="68" text-anchor="middle" font-size="13" fill="#666">可存储372个索引项</text>
+  </g>
+  
+  <!-- 连接线1 -->
+  <path d="M1170,500 L1170,520" stroke="#ff8a3d" stroke-width="2" fill="none"/>
+  <polygon points="1170,520 1165,515 1175,515" fill="#ff8a3d"/>
+  
+  <!-- 第二层非叶子节点 -->
+  <g transform="translate(950, 540)">
+    <!-- 非叶子节点1 -->
+    <rect width="140" height="70" rx="6" ry="6" fill="#fff5f0" stroke="#ff8a3d" stroke-width="2"/>
+    <text x="70" y="25" text-anchor="middle" font-size="13" font-weight="bold">非叶子节点1</text>
+    <text x="70" y="45" text-anchor="middle" font-size="11">可存372索引项</text>
+  </g>
+  
+  <g transform="translate(1110, 540)">
+    <!-- 非叶子节点2 -->
+    <rect width="140" height="70" rx="6" ry="6" fill="#fff5f0" stroke="#ff8a3d" stroke-width="2"/>
+    <text x="70" y="25" text-anchor="middle" font-size="13" font-weight="bold">非叶子节点2</text>
+    <text x="70" y="45" text-anchor="middle" font-size="11">可存372索引项</text>
+  </g>
+  
+  <g transform="translate(1270, 540)">
+    <!-- 非叶子节点... -->
+    <rect width="140" height="70" rx="6" ry="6" fill="#fff5f0" stroke="#ff8a3d" stroke-width="2"/>
+    <text x="70" y="25" text-anchor="middle" font-size="13" font-weight="bold">非叶子节点...</text>
+    <text x="70" y="45" text-anchor="middle" font-size="11">可存372索引项</text>
+  </g>
+  
+  <!-- 连接根节点到第二层 -->
+  <path d="M1170,500 Q1170,520 1020,540" stroke="#ff8a3d" stroke-width="1.5" fill="none"/>
+  <path d="M1170,500 Q1170,520 1180,540" stroke="#ff8a3d" stroke-width="1.5" fill="none"/>
+  <path d="M1170,500 Q1170,520 1340,540" stroke="#ff8a3d" stroke-width="1.5" fill="none"/>
+  
+  <!-- 连接线2 -->
+  <g transform="translate(1020, 610)">
+    <path d="M0,0 L0,20" stroke="#ff8a3d" stroke-width="1.5" fill="none"/>
+    <polygon points="0,20 -5,15 5,15" fill="#ff8a3d"/>
+  </g>
+  
+  <g transform="translate(1180, 610)">
+    <path d="M0,0 L0,20" stroke="#ff8a3d" stroke-width="1.5" fill="none"/>
+    <polygon points="0,20 -5,15 5,15" fill="#ff8a3d"/>
+  </g>
+  
+  <g transform="translate(1340, 610)">
+    <path d="M0,0 L0,20" stroke="#ff8a3d" stroke-width="1.5" fill="none"/>
+    <polygon points="0,20 -5,15 5,15" fill="#ff8a3d"/>
+  </g>
+  
+  <!-- 叶子节点层 -->
+  <rect x="860" y="630" width="620" height="60" fill="#f8f8f8" stroke="#ccc" stroke-width="1"/>
+  <text x="1170" y="660" text-anchor="middle" font-size="16" font-weight="bold" fill="#666">叶子节点层 (存储实际数据)</text>
+  
+  <!-- 叶子节点示例 -->
+  <g transform="translate(890, 700)">
+    <!-- 叶子节点1 -->
+    <rect width="120" height="90" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="60" y="25" text-anchor="middle" font-size="12" font-weight="bold">叶子节点</text>
+    <rect x="20" y="35" width="80" height="20" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="60" y="47" text-anchor="middle" font-size="10">存储数据</text>
+  </g>
+  
+  <g transform="translate(1020, 700)">
+    <!-- 叶子节点2 -->
+    <rect width="120" height="90" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="60" y="25" text-anchor="middle" font-size="12" font-weight="bold">叶子节点</text>
+    <rect x="20" y="35" width="80" height="20" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="60" y="47" text-anchor="middle" font-size="10">存储数据</text>
+  </g>
+  
+  <g transform="translate(1150, 700)">
+    <!-- 叶子节点3 -->
+    <rect width="120" height="90" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="60" y="25" text-anchor="middle" font-size="12" font-weight="bold">叶子节点</text>
+    <rect x="20" y="35" width="80" height="20" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="60" y="47" text-anchor="middle" font-size="10">存储数据</text>
+  </g>
+  
+  <g transform="translate(1280, 700)">
+    <!-- 叶子节点... -->
+    <rect width="120" height="90" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="60" y="25" text-anchor="middle" font-size="12" font-weight="bold">叶子节点</text>
+    <rect x="20" y="35" width="80" height="20" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="60" y="47" text-anchor="middle" font-size="10">存储数据</text>
+  </g>
+  
+  <!-- 连接第二层到叶子节点 -->
+  <g transform="translate(1020, 630)">
+    <path d="M0,0 Q0,20 -60,70" stroke="#ff8a3d" stroke-width="1" fill="none"/>
+    <path d="M0,0 Q0,20 60,70" stroke="#ff8a3d" stroke-width="1" fill="none"/>
+  </g>
+  
+  <g transform="translate(1180, 630)">
+    <path d="M0,0 Q0,20 -60,70" stroke="#ff8a3d" stroke-width="1" fill="none"/>
+    <path d="M0,0 Q0,20 60,70" stroke="#ff8a3d" stroke-width="1" fill="none"/>
+  </g>
+  
+  <!-- 存储能力分析 -->
+  <rect x="860" y="810" width="620" height="80" rx="6" ry="6" fill="#fff5f0" stroke="#ff8a3d" stroke-width="1"/>
+  <text x="1170" y="835" text-anchor="middle" font-size="14" font-weight="bold" fill="#cc5a1a">存储能力分析</text>
+  <text x="1170" y="855" text-anchor="middle" font-size="13">
+    根节点指向372个第二层节点 × 每个第二层节点指向372个叶子节点 = <tspan font-weight="bold">138,384个叶子节点</tspan>
+  </text>
+  <text x="1170" y="875" text-anchor="middle" font-size="13">
+    若每个叶子节点存储100行，总计约 <tspan font-weight="bold">1383万行</tspan>（比8字节主键少很多）
+  </text>
+  
+  <!-- ========== 性能对比 ========== -->
+  <rect x="100" y="940" width="1400" height="130" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="800" y="970" text-anchor="middle" font-size="22" font-weight="bold" fill="#333">性能对比：查询1亿行数据</text>
+  
+  <!-- 8字节主键查询路径 -->
+  <rect x="150" y="1000" width="400" height="50" rx="6" ry="6" fill="#e6ecff" stroke="#4a6bff" stroke-width="1"/>
+  <text x="350" y="1025" text-anchor="middle" font-size="16" font-weight="bold">8字节主键</text>
+  <text x="350" y="1045" text-anchor="middle" font-size="14">树高=2 → 需要2次磁盘IO</text>
+  
+  <!-- 箭头 -->
+  <path d="M550,1025 L650,1025" stroke="#333" stroke-width="2" fill="none"/>
+  <polygon points="650,1025 645,1020 645,1030" fill="#333"/>
+  
+  <!-- 36字节UUID查询路径 -->
+  <rect x="750" y="1000" width="400" height="50" rx="6" ry="6" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+  <text x="950" y="1025" text-anchor="middle" font-size="16" font-weight="bold">36字节UUID</text>
+  <text x="950" y="1045" text-anchor="middle" font-size="14">树高=3 → 需要3次磁盘IO</text>
+  
+  <!-- 性能差距 -->
+  <rect x="1200" y="990" width="250" height="70" rx="6" ry="6" fill="#ffebeb" stroke="#ff3366" stroke-width="2"/>
+  <text x="1325" y="1010" text-anchor="middle" font-size="16" font-weight="bold" fill="#ff3366">性能差距</text>
+  <text x="1325" y="1035" text-anchor="middle" font-size="14" fill="#ff3366">
+    额外增加<tspan font-weight="bold">50%</tspan>的磁盘IO
+  </text>
+  
+  <!-- ========== 底部总结 ========== -->
+  <rect x="100" y="1080" width="1400" height="50" rx="6" ry="6" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+  <text x="800" y="1105" text-anchor="middle" font-size="16">
+    关键结论：主键大小直接影响B+树高度，<tspan font-weight="bold" fill="#ff3366">每增加一层树高，查询需要多一次磁盘IO</tspan>
+  </text>
+</svg>
