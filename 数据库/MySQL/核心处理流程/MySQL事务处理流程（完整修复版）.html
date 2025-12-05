@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL事务处理流程（完整修复版）</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 16px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+            padding: 30px;
+            overflow: hidden;
+        }
+        
+        h1 {
+            color: #0d3c61;
+            text-align: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #2a7de1;
+            font-weight: 600;
+            font-size: 32px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #5d7186;
+            margin-bottom: 40px;
+            font-size: 18px;
+            font-weight: 400;
+        }
+        
+        .flowchart-wrapper {
+            width: 100%;
+            overflow: auto;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f8fafc 0%, #f0f7ff 100%);
+            padding: 20px;
+            min-height: 850px;
+            border: 1px solid #e1e8f0;
+            position: relative;
+        }
+        
+        svg {
+            display: block;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        }
+        
+        /* 流程节点样式 */
+        .process-node {
+            stroke-width: 2;
+            stroke: #2a7de1;
+            rx: 8;
+            ry: 8;
+            filter: drop-shadow(0 3px 6px rgba(42, 125, 225, 0.1));
+            transition: all 0.3s ease;
+        }
+        
+        .process-node:hover {
+            filter: drop-shadow(0 6px 12px rgba(42, 125, 225, 0.2));
+            stroke-width: 3;
+            cursor: pointer;
+        }
+        
+        /* 箭头样式 */
+        .process-arrow {
+            stroke-width: 2;
+            stroke: #2a7de1;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+        
+        .critical-arrow {
+            stroke-width: 3;
+            stroke: #fa8c16;
+            fill: none;
+            marker-end: url(#critical-arrow);
+        }
+        
+        .rollback-arrow {
+            stroke-width: 2;
+            stroke: #f5222d;
+            fill: none;
+            stroke-dasharray: 5,5;
+            marker-end: url(#rollback-arrow);
+        }
+        
+        /* 文本样式 */
+        .node-title {
+            font-size: 15px;
+            font-weight: 600;
+            fill: #0d3c61;
+            text-anchor: middle;
+        }
+        
+        .node-desc {
+            font-size: 13px;
+            fill: #5d7186;
+            text-anchor: middle;
+        }
+        
+        .arrow-label {
+            font-size: 13px;
+            fill: #5d7186;
+            font-weight: 500;
+        }
+        
+        /* 阶段标题 */
+        .phase-header {
+            font-size: 20px;
+            font-weight: 700;
+            fill: #0d3c61;
+            text-anchor: middle;
+            text-decoration: underline;
+            text-decoration-color: #2a7de1;
+            text-decoration-thickness: 3px;
+        }
+        
+        /* 控制按钮 */
+        .controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 25px;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #2a7de1 0%, #1e5cb3 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(42, 125, 225, 0.2);
+        }
+        
+        .control-btn:hover {
+            background: linear-gradient(135deg, #1e5cb3 0%, #154280 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(42, 125, 225, 0.3);
+        }
+        
+        /* 信息面板 */
+        .info-panel {
+            margin-top: 40px;
+            padding: 25px;
+            background: linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%);
+            border-radius: 12px;
+            border-left: 5px solid #2a7de1;
+        }
+        
+        .info-panel h3 {
+            color: #0d3c61;
+            margin-bottom: 20px;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .phase-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .phase-section h4 {
+            color: #2a7de1;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        
+        .phase-section h4:before {
+            content: "▶";
+            margin-right: 10px;
+            color: #2a7de1;
+        }
+        
+        .phase-section ul {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .phase-section li {
+            margin-bottom: 8px;
+            line-height: 1.7;
+        }
+        
+        .highlight {
+            color: #2a7de1;
+            font-weight: 600;
+            background-color: rgba(42, 125, 225, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        /* 颜色定义 */
+        .client-color { fill: #e6f7ff; }
+        .server-color { fill: #f0f8ff; }
+        .innodb-color { fill: #f6ffed; }
+        .disk-color { fill: #fff7e6; }
+        .commit-color { fill: #f6ffed; }
+        .rollback-color { fill: #fff1f0; }
+        
+        /* 时间线 */
+        .timeline {
+            stroke: #91d5ff;
+            stroke-width: 3;
+            stroke-dasharray: 10,5;
+        }
+        
+        @media (max-width: 1200px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 28px;
+            }
+            
+            .flowchart-wrapper {
+                padding: 15px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .control-btn {
+                width: 100%;
+                max-width: 300px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .subtitle {
+                font-size: 16px;
+            }
+        }
+        
+        /* 自定义滚动条 */
+        .flowchart-wrapper::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        .flowchart-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 5px;
+        }
+        
+        .flowchart-wrapper::-webkit-scrollbar-thumb {
+            background: #2a7de1;
+            border-radius: 5px;
+        }
+        
+        .flowchart-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #1e5cb3;
+        }
+        
+        /* 关键节点高亮 */
+        .critical-node {
+            stroke-width: 3;
+            stroke: #fa8c16;
+            filter: drop-shadow(0 4px 10px rgba(250, 140, 22, 0.3));
+        }
+        
+        /* 阶段分隔 */
+        .phase-divider {
+            stroke: #91d5ff;
+            stroke-width: 2;
+            stroke-dasharray: 15,10;
+        }
+        
+        /* 说明框 */
+        .info-box {
+            fill: #e6f7ff;
+            stroke: #91d5ff;
+            stroke-width: 2;
+            rx: 10;
+            ry: 10;
+            filter: drop-shadow(0 3px 8px rgba(145, 213, 255, 0.2));
+        }
+        
+        .info-title {
+            font-size: 16px;
+            font-weight: 700;
+            fill: #0d3c61;
+            text-anchor: middle;
+        }
+        
+        .info-text {
+            font-size: 13px;
+            fill: #5d7186;
+            text-anchor: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MySQL事务处理流程（完整修复版）</h1>
+        <p class="subtitle">清晰、完整的InnoDB事务处理机制图示</p>
+        
+        <div class="flowchart-wrapper">
+            <svg id="flowchart" width="1600" height="3000" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <!-- 箭头定义 -->
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#2a7de1"/>
+                    </marker>
+                    <marker id="critical-arrow" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto">
+                        <polygon points="0 0, 12 4.5, 0 9" fill="#fa8c16"/>
+                    </marker>
+                    <marker id="rollback-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#f5222d"/>
+                    </marker>
+                    
+                    <!-- 渐变定义 -->
+                    <linearGradient id="client-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#e6f7ff;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#bae7ff;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="server-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#f0f8ff;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#d4eeff;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="innodb-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#f6ffed;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#d9f7be;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                
+                <!-- 时间轴 -->
+                <line x1="200" y1="100" x2="1400" y2="100" class="timeline"/>
+                <text x="800" y="90" class="node-title" font-size="16">MySQL事务处理时间线</text>
+                
+                <!-- ==================== 第一阶段：事务开始 ==================== -->
+                <text x="800" y="140" class="phase-header">第一阶段：事务开始</text>
+                
+                <!-- 步骤1: 客户端发送BEGIN -->
+                <rect x="300" y="160" width="400" height="80" class="process-node client-color"/>
+                <text x="500" y="195" class="node-title">1. 客户端发送BEGIN</text>
+                <text x="500" y="215" class="node-desc">BEGIN / START TRANSACTION</text>
+                
+                <!-- 箭头到步骤2 -->
+                <path d="M 500 240 L 500 280" class="process-arrow"/>
+                <text x="520" y="260" class="arrow-label">建立连接</text>
+                
+                <!-- 步骤2: 连接器验证 -->
+                <rect x="300" y="280" width="400" height="80" class="process-node server-color"/>
+                <text x="500" y="315" class="node-title">2. 连接器验证</text>
+                <text x="500" y="335" class="node-desc">验证权限，分配线程</text>
+                
+                <!-- 箭头到步骤3 -->
+                <path d="M 500 360 L 500 400" class="process-arrow"/>
+                <text x="520" y="380" class="arrow-label">分配事务ID</text>
+                
+                <!-- 步骤3: 分配事务ID -->
+                <rect x="300" y="400" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="435" class="node-title">3. 分配事务ID</text>
+                <text x="500" y="455" class="node-desc">trx_id = 事务计数器+1</text>
+                
+                <!-- 阶段分隔线 -->
+                <line x1="100" y1="500" x2="1500" y2="500" class="phase-divider"/>
+                
+                <!-- ==================== 第二阶段：SQL执行准备 ==================== -->
+                <text x="800" y="540" class="phase-header">第二阶段：SQL执行准备</text>
+                
+                <!-- 步骤4: 客户端发送SQL -->
+                <rect x="300" y="560" width="400" height="80" class="process-node client-color"/>
+                <text x="500" y="595" class="node-title">4. 客户端发送SQL</text>
+                <text x="500" y="615" class="node-desc">UPDATE users SET name='John'</text>
+                
+                <!-- 箭头到步骤5 -->
+                <path d="M 500 640 L 500 680" class="process-arrow"/>
+                <text x="520" y="660" class="arrow-label">SQL请求</text>
+                
+                <!-- 步骤5: Server层处理 -->
+                <rect x="300" y="680" width="400" height="100" class="process-node server-color"/>
+                <text x="500" y="715" class="node-title">5. Server层处理</text>
+                <text x="500" y="740" class="node-desc">解析器 → 优化器 → 执行器</text>
+                <text x="500" y="760" class="node-desc">生成执行计划</text>
+                
+                <!-- 箭头到步骤6 -->
+                <path d="M 500 780 L 500 820" class="process-arrow"/>
+                <text x="520" y="800" class="arrow-label">调用引擎API</text>
+                
+                <!-- 步骤6: InnoDB准备 -->
+                <rect x="300" y="820" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="855" class="node-title">6. InnoDB准备</text>
+                <text x="500" y="875" class="node-desc">检查约束，获取锁</text>
+                
+                <!-- 阶段分隔线 -->
+                <line x1="100" y1="920" x2="1500" y2="920" class="phase-divider"/>
+                
+                <!-- ==================== 第三阶段：Undo Log生成 ==================== -->
+                <text x="800" y="960" class="phase-header">第三阶段：Undo Log生成 (WAL原则)</text>
+                
+                <!-- 步骤7: 生成Undo Log -->
+                <rect x="300" y="980" width="400" height="100" class="process-node innodb-color"/>
+                <text x="500" y="1015" class="node-title">7. 生成Undo Log</text>
+                <text x="500" y="1040" class="node-desc">记录修改前的数据镜像</text>
+                <text x="500" y="1060" class="node-desc">trx_id, roll_ptr, old_data</text>
+                
+                <!-- 箭头到步骤8 -->
+                <path d="M 500 1080 L 500 1120" class="process-arrow"/>
+                <text x="520" y="1100" class="arrow-label">写入缓冲区</text>
+                
+                <!-- 步骤8: 写入Undo Log缓冲区 -->
+                <rect x="300" y="1120" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="1155" class="node-title">8. 写入Undo Log缓冲区</text>
+                <text x="500" y="1175" class="node-desc">内存中暂存Undo记录</text>
+                
+                <!-- 阶段分隔线 -->
+                <line x1="100" y1="1220" x2="1500" y2="1220" class="phase-divider"/>
+                
+                <!-- ==================== 第四阶段：数据修改 ==================== -->
+                <text x="800" y="1260" class="phase-header">第四阶段：数据修改 (Buffer Pool操作)</text>
+                
+                <!-- 步骤9: 读取数据页到Buffer Pool -->
+                <rect x="300" y="1280" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="1315" class="node-title">9. 读取数据页到Buffer Pool</text>
+                <text x="500" y="1335" class="node-desc">如未在内存则从磁盘加载</text>
+                
+                <!-- 箭头到步骤10 -->
+                <path d="M 500 1360 L 500 1400" class="process-arrow"/>
+                <text x="520" y="1380" class="arrow-label">修改数据</text>
+                
+                <!-- 步骤10: 修改Buffer Pool数据页 -->
+                <rect x="300" y="1400" width="400" height="100" class="process-node innodb-color"/>
+                <text x="500" y="1435" class="node-title">10. 修改Buffer Pool数据页</text>
+                <text x="500" y="1460" class="node-desc">更新字段值</text>
+                <text x="500" y="1480" class="node-desc">标记为脏页(Dirty Page)</text>
+                
+                <!-- 箭头到步骤11 -->
+                <path d="M 500 1500 L 500 1540" class="process-arrow"/>
+                <text x="520" y="1520" class="arrow-label">更新索引</text>
+                
+                <!-- 步骤11: 更新相关索引 -->
+                <rect x="300" y="1540" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="1575" class="node-title">11. 更新相关索引</text>
+                <text x="500" y="1595" class="node-desc">如字段有索引则更新</text>
+                
+                <!-- 阶段分隔线 -->
+                <line x1="100" y1="1640" x2="1500" y2="1640" class="phase-divider"/>
+                
+                <!-- ==================== 第五阶段：Redo Log生成 ==================== -->
+                <text x="800" y="1680" class="phase-header">第五阶段：Redo Log生成 (保证持久性)</text>
+                
+                <!-- 步骤12: 生成Redo Log -->
+                <rect x="300" y="1700" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="1735" class="node-title">12. 生成Redo Log</text>
+                <text x="500" y="1755" class="node-desc">记录数据修改操作</text>
+                
+                <!-- 箭头到步骤13 -->
+                <path d="M 500 1780 L 500 1820" class="process-arrow"/>
+                <text x="520" y="1800" class="arrow-label">写入缓冲区</text>
+                
+                <!-- 步骤13: 写入Redo Log缓冲区 -->
+                <rect x="300" y="1820" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="1855" class="node-title">13. 写入Redo Log缓冲区</text>
+                <text x="500" y="1875" class="node-desc">内存中暂存Redo记录</text>
+                
+                <!-- 阶段分隔线 -->
+                <line x1="100" y1="1920" x2="1500" y2="1920" class="phase-divider"/>
+                
+                <!-- ==================== 第六阶段：事务提交 ==================== -->
+                <text x="800" y="1960" class="phase-header">第六阶段：事务提交 (关键阶段)</text>
+                
+                <!-- 步骤14: 客户端发送COMMIT -->
+                <rect x="300" y="1980" width="400" height="80" class="process-node client-color"/>
+                <text x="500" y="2015" class="node-title">14. 客户端发送COMMIT</text>
+                <text x="500" y="2035" class="node-desc">提交事务请求</text>
+                
+                <!-- 箭头到步骤15 -->
+                <path d="M 500 2060 L 500 2100" class="process-arrow"/>
+                <text x="520" y="2080" class="arrow-label">提交事务</text>
+                
+                <!-- 步骤15: Redo Log刷盘 (关键步骤) -->
+                <rect x="300" y="2100" width="400" height="100" class="process-node critical-node innodb-color"/>
+                <text x="500" y="2135" class="node-title" fill="#fa8c16">15. Redo Log刷盘 (关键步骤)</text>
+                <text x="500" y="2160" class="node-desc" fill="#fa8c16">将Log Buffer刷新到磁盘</text>
+                <text x="500" y="2180" class="node-desc" fill="#fa8c16">保证事务持久性</text>
+                
+                <!-- 关键路径标注 -->
+                <path d="M 100 2150 Q 50 2150 50 2200 Q 50 2250 150 2250" class="critical-arrow"/>
+                <text x="100" y="2220" class="arrow-label" fill="#fa8c16" font-weight="bold">关键路径</text>
+                
+                <!-- 箭头到步骤16 -->
+                <path d="M 500 2200 L 500 2240" class="process-arrow"/>
+                <text x="520" y="2220" class="arrow-label">释放锁</text>
+                
+                <!-- 步骤16: 释放锁资源 -->
+                <rect x="300" y="2240" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="2275" class="node-title">16. 释放锁资源</text>
+                <text x="500" y="2295" class="node-desc">行锁、表锁等</text>
+                
+                <!-- 阶段分隔线 -->
+                <line x1="100" y1="2340" x2="1500" y2="2340" class="phase-divider"/>
+                
+                <!-- ==================== 第七阶段：异步刷脏页 ==================== -->
+                <text x="800" y="2380" class="phase-header">第七阶段：异步刷脏页 (后台操作)</text>
+                
+                <!-- 步骤17: 后台线程刷脏页 -->
+                <rect x="300" y="2400" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="2435" class="node-title">17. 后台线程刷脏页</text>
+                <text x="500" y="2455" class="node-desc">Page Cleaner线程</text>
+                
+                <!-- 箭头到步骤18 -->
+                <path d="M 500 2480 L 500 2520" class="process-arrow"/>
+                <text x="520" y="2500" class="arrow-label">写入数据文件</text>
+                
+                <!-- 步骤18: 数据写入磁盘文件 -->
+                <rect x="300" y="2520" width="400" height="80" class="process-node disk-color"/>
+                <text x="500" y="2555" class="node-title">18. 数据写入磁盘文件</text>
+                <text x="500" y="2575" class="node-desc">.ibd数据文件</text>
+                
+                <!-- 阶段分隔线 -->
+                <line x1="100" y1="2620" x2="1500" y2="2620" class="phase-divider"/>
+                
+                <!-- ==================== 第八阶段：清理阶段 ==================== -->
+                <text x="800" y="2660" class="phase-header">第八阶段：清理阶段</text>
+                
+                <!-- 步骤19: Purge线程清理Undo Log -->
+                <rect x="300" y="2680" width="400" height="80" class="process-node innodb-color"/>
+                <text x="500" y="2715" class="node-title">19. Purge线程清理Undo Log</text>
+                <text x="500" y="2735" class="node-desc">回收不再需要的Undo</text>
+                
+                <!-- 箭头到步骤20 -->
+                <path d="M 500 2760 L 500 2800" class="process-arrow"/>
+                <text x="520" y="2780" class="arrow-label">返回结果</text>
+                
+                <!-- 步骤20: 返回结果给客户端 -->
+                <rect x="300" y="2800" width="400" height="80" class="process-node client-color"/>
+                <text x="500" y="2835" class="node-title">20. 返回结果给客户端</text>
+                <text x="500" y="2855" class="node-desc">Query OK, 1 row affected</text>
+                
+                <!-- 完成标记 -->
+                <rect x="250" y="2900" width="500" height="60" class="process-node" fill="#52c41a"/>
+                <text x="500" y="2935" class="node-title" fill="white">事务处理完成 ✓</text>
+                
+                <!-- ==================== 右侧信息面板 ==================== -->
+                <!-- WAL原则说明 -->
+                <rect x="1000" y="160" width="500" height="120" class="info-box"/>
+                <text x="1250" y="185" class="info-title">WAL原则</text>
+                <text x="1250" y="210" class="info-text">Write-Ahead Logging</text>
+                <text x="1250" y="230" class="info-text">先写日志，后改数据</text>
+                <text x="1250" y="250" class="info-text">保证原子性和持久性</text>
+                
+                <!-- 连接说明 -->
+                <path d="M 700 200 Q 800 200 900 200 Q 1000 200 1000 200" class="process-arrow" stroke-dasharray="5,5"/>
+                
+                <!-- 事务回滚路径 -->
+                <rect x="1000" y="320" width="500" height="120" class="info-box"/>
+                <text x="1250" y="345" class="info-title">事务回滚流程</text>
+                <text x="1250" y="370" class="info-text">如果执行ROLLBACK或发生错误</text>
+                <text x="1250" y="390" class="info-text">使用Undo Log恢复数据</text>
+                <text x="1250" y="410" class="info-text">释放锁，清理资源</text>
+                
+                <!-- 回滚箭头 -->
+                <path d="M 700 360 Q 800 360 900 360 Q 1000 360 1000 360" class="rollback-arrow"/>
+                
+                <!-- ACID特性 -->
+                <rect x="1000" y="480" width="500" height="180" class="info-box"/>
+                <text x="1250" y="505" class="info-title">ACID特性实现</text>
+                <text x="1250" y="530" class="info-text">原子性：通过Undo Log实现</text>
+                <text x="1250" y="550" class="info-text">一致性：约束检查+日志保证</text>
+                <text x="1250" y="570" class="info-text">隔离性：锁机制+MVCC实现</text>
+                <text x="1250" y="590" class="info-text">持久性：Redo Log刷盘保证</text>
+                
+                <!-- MVCC说明 -->
+                <rect x="1000" y="700" width="500" height="120" class="info-box"/>
+                <text x="1250" y="725" class="info-title">MVCC与事务关系</text>
+                <text x="1250" y="750" class="info-text">非锁定读：通过Undo Log访问历史版本</text>
+                <text x="1250" y="770" class="info-text">Read View：决定数据可见性</text>
+                
+                <!-- 性能优化 -->
+                <rect x="1000" y="860" width="500" height="180" class="info-box"/>
+                <text x="1250" y="885" class="info-title">性能优化要点</text>
+                <text x="1250" y="910" class="info-text">WAL原则：顺序写日志</text>
+                <text x="1250" y="930" class="info-text">组提交：合并Redo Log刷盘</text>
+                <text x="1250" y="950" class="info-text">异步刷脏页：不影响事务提交</text>
+                <text x="1250" y="970" class="info-text">Change Buffer：减少随机I/O</text>
+                
+                <!-- 图例说明 -->
+                <rect x="1000" y="1080" width="500" height="180" class="info-box"/>
+                <text x="1250" y="1105" class="info-title">图例说明</text>
+                
+                <rect x="1020" y="1130" width="30" height="30" class="process-node client-color"/>
+                <text x="1060" y="1150" class="info-text">客户端操作</text>
+                
+                <rect x="1150" y="1130" width="30" height="30" class="process-node server-color"/>
+                <text x="1190" y="1150" class="info-text">Server层操作</text>
+                
+                <rect x="1020" y="1170" width="30" height="30" class="process-node innodb-color"/>
+                <text x="1060" y="1190" class="info-text">InnoDB操作</text>
+                
+                <rect x="1150" y="1170" width="30" height="30" class="process-node disk-color"/>
+                <text x="1190" y="1190" class="info-text">磁盘操作</text>
+                
+                <rect x="1020" y="1210" width="30" height="30" class="process-node critical-node"/>
+                <text x="1060" y="1230" class="info-text">关键步骤</text>
+                
+                <line x1="1150" y1="1245" x2="1180" y2="1245" class="rollback-arrow"/>
+                <text x="1190" y="1250" class="info-text">回滚路径</text>
+                
+                <!-- 时间轴 -->
+                <line x1="100" y1="2980" x2="1500" y2="2980" class="timeline"/>
+                <text x="800" y="3000" class="node-title" font-size="14">MySQL事务处理时间线</text>
+                
+                <!-- 总箭头 -->
+                <path d="M 500 480 L 500 520" class="process-arrow"/>
+                <path d="M 500 900 L 500 940" class="process-arrow"/>
+                <path d="M 500 1200 L 500 1240" class="process-arrow"/>
+                <path d="M 500 1600 L 500 1640" class="process-arrow"/>
+                <path d="M 500 1880 L 500 1920" class="process-arrow"/>
+                <path d="M 500 2320 L 500 2360" class="process-arrow"/>
+                <path d="M 500 2600 L 500 2640" class="process-arrow"/>
+                <path d="M 500 2880 L 500 2960" class="process-arrow"/>
+            </svg>
+        </div>
+        
+        <div class="controls">
+            <button id="zoomIn" class="control-btn">放大视图</button>
+            <button id="zoomOut" class="control-btn">缩小视图</button>
+            <button id="resetView" class="control-btn">重置视图</button>
+            <button id="downloadSVG" class="control-btn">下载SVG图</button>
+            <button id="toggleInfo" class="control-btn">切换信息面板</button>
+        </div>
+        
+        <div class="info-panel" id="infoPanel">
+            <h3>MySQL事务处理流程详解</h3>
+            
+            <div class="phase-section">
+                <h4>第一阶段：事务开始</h4>
+                <ul>
+                    <li><span class="highlight">客户端发送BEGIN</span>：应用程序通过BEGIN、START TRANSACTION或设置autocommit=0启动事务。</li>
+                    <li><span class="highlight">连接器验证</span>：MySQL连接器验证客户端权限，为连接分配线程，建立通信通道。</li>
+                    <li><span class="highlight">分配事务ID</span>：InnoDB为新事务分配唯一的事务ID (trx_id)，用于MVCC版本控制和锁管理。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h4>第二阶段：SQL执行准备</h4>
+                <ul>
+                    <li><span class="highlight">客户端发送SQL</span>：应用程序发送UPDATE、INSERT或DELETE等DML语句到MySQL服务器。</li>
+                    <li><span class="highlight">Server层处理</span>：
+                        <ul>
+                            <li><strong>解析器</strong>：对SQL进行词法和语法分析，生成解析树。</li>
+                            <li><strong>优化器</strong>：基于成本选择最优执行计划，考虑索引选择、连接顺序等。</li>
+                            <li><strong>执行器</strong>：准备调用存储引擎接口执行查询。</li>
+                        </ul>
+                    </li>
+                    <li><span class="highlight">InnoDB准备</span>：InnoDB检查相关约束（如外键约束），获取必要的锁（行锁、意向锁等），确保数据一致性。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h4>第三阶段：Undo Log生成 (WAL原则)</h4>
+                <ul>
+                    <li><span class="highlight">生成Undo Log</span>：InnoDB遵循WAL(Write-Ahead Logging)原则，先写日志，再修改数据。记录修改前的完整数据镜像。</li>
+                    <li><span class="highlight">Undo Log内容</span>：包含事务ID (trx_id)、回滚指针(roll_ptr)、修改前的数据值(old_data)等。</li>
+                    <li><span class="highlight">Undo Log作用</span>：支持事务回滚和MVCC多版本并发控制，为其他事务提供历史版本数据访问。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h4>第四阶段：数据修改 (Buffer Pool操作)</h4>
+                <ul>
+                    <li><span class="highlight">加载数据页</span>：如果目标数据页不在Buffer Pool中，则从磁盘加载到内存的Buffer Pool。</li>
+                    <li><span class="highlight">修改数据页</span>：在Buffer Pool中修改数据，更新相应的字段值。</li>
+                    <li><span class="highlight">标记脏页</span>：修改后的数据页被标记为"脏页"(Dirty Page)，表示内存中的数据与磁盘不一致。</li>
+                    <li><span class="highlight">更新索引</span>：如果修改的字段有索引，需要更新相应的索引页，维护索引结构一致性。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h4>第五阶段：Redo Log生成 (保证持久性)</h4>
+                <ul>
+                    <li><span class="highlight">生成Redo Log</span>：记录数据修改操作，包括修改的页面、位置、新值等物理日志信息。</li>
+                    <li><span class="highlight">写入Log Buffer</span>：Redo Log先写入内存中的Log Buffer，批量写入提升性能。</li>
+                    <li><span class="highlight">Redo Log作用</span>：保证事务的持久性(Durability)，即使系统崩溃，也能通过Redo Log恢复已提交但未刷盘的数据。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h4>第六阶段：事务提交 (关键阶段)</h4>
+                <ul>
+                    <li><span class="highlight">客户端发送COMMIT</span>：应用程序提交事务，请求持久化数据修改。</li>
+                    <li><span class="highlight">Redo Log刷盘 (关键步骤)</span>：InnoDB将Log Buffer中的Redo Log刷新到磁盘文件(ib_logfile)，这是保证事务持久性的关键步骤。</li>
+                    <li><span class="highlight">两阶段提交</span>：在开启binlog的情况下，MySQL使用两阶段提交协议，保证Redo Log和Binlog的一致性。</li>
+                    <li><span class="highlight">释放锁</span>：事务提交后释放持有的所有锁（行锁、表锁等），其他被阻塞的事务可以继续执行。</li>
+                    <li><span class="highlight">关键点</span>：事务在Redo Log刷盘后即视为已提交，即使数据页尚未刷盘到.ibd文件，也能通过Redo Log在崩溃恢复时重做。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h4>第七阶段：异步刷脏页 (后台操作)</h4>
+                <ul>
+                    <li><span class="highlight">Page Cleaner线程</span>：InnoDB后台线程定期将Buffer Pool中的脏页刷新到磁盘。</li>
+                    <li><span class="highlight">写入数据文件</span>：脏页被写入.ibd数据文件，完成数据持久化。</li>
+                    <li><span class="highlight">性能优化</span>：异步刷脏页不影响事务提交性能，提升系统整体吞吐量，通过批量写入减少I/O操作。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h4>第八阶段：清理阶段</h4>
+                <ul>
+                    <li><span class="highlight">Purge线程清理</span>：后台Purge线程清理不再需要的Undo Log记录，释放存储空间。</li>
+                    <li><span class="highlight">返回结果</span>：向客户端返回执行结果（如：Query OK, 1 row affected）。</li>
+                    <li><span class="highlight">事务完成</span>：所有阶段执行完毕，事务处理完成，系统资源得到释放。</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const svg = document.getElementById('flowchart');
+            const container = document.querySelector('.flowchart-wrapper');
+            const infoPanel = document.getElementById('infoPanel');
+            let scale = 1;
+            const scaleStep = 0.1;
+            
+            // 缩放功能
+            document.getElementById('zoomIn').addEventListener('click', function() {
+                scale += scaleStep;
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transformOrigin = 'top left';
+                updateScrollPosition();
+            });
+            
+            document.getElementById('zoomOut').addEventListener('click', function() {
+                if (scale > scaleStep) {
+                    scale -= scaleStep;
+                    svg.style.transform = `scale(${scale})`;
+                    svg.style.transformOrigin = 'top left';
+                    updateScrollPosition();
+                }
+            });
+            
+            document.getElementById('resetView').addEventListener('click', function() {
+                scale = 1;
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transformOrigin = 'top left';
+                container.scrollTop = 0;
+                container.scrollLeft = 0;
+            });
+            
+            // 更新滚动位置以保持中心
+            function updateScrollPosition() {
+                const scrollLeft = (svg.clientWidth * scale - container.clientWidth) / 2;
+                const scrollTop = (svg.clientHeight * scale - container.clientHeight) / 3;
+                
+                container.scrollLeft = Math.max(0, scrollLeft);
+                container.scrollTop = Math.max(0, scrollTop);
+            }
+            
+            // 下载SVG功能
+            document.getElementById('downloadSVG').addEventListener('click', function() {
+                const serializer = new XMLSerializer();
+                let source = serializer.serializeToString(svg);
+                
+                // 添加命名空间
+                if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+                    source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+                }
+                if (!source.match(/^<svg[^>]+"http\:\/\/www\.w3\.org\/1999\/xlink"/)) {
+                    source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+                }
+                
+                const svgBlob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+                const url = URL.createObjectURL(svgBlob);
+                
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = 'mysql-transaction-process-complete.svg';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+            });
+            
+            // 切换信息面板
+            document.getElementById('toggleInfo').addEventListener('click', function() {
+                if (infoPanel.style.display === 'none') {
+                    infoPanel.style.display = 'block';
+                    this.textContent = '隐藏信息面板';
+                } else {
+                    infoPanel.style.display = 'none';
+                    this.textContent = '显示信息面板';
+                }
+            });
+            
+            // 添加SVG交互效果
+            const processNodes = document.querySelectorAll('.process-node');
+            processNodes.forEach(node => {
+                // 悬停效果
+                node.addEventListener('mouseenter', function() {
+                    this.style.filter = 'drop-shadow(0 6px 12px rgba(42, 125, 225, 0.25))';
+                    this.style.strokeWidth = '3';
+                    
+                    // 获取节点文本
+                    const textElements = this.parentNode.querySelectorAll('text');
+                    let title = '';
+                    textElements.forEach(text => {
+                        if (text.classList.contains('node-title') && 
+                            Math.abs(parseInt(text.getAttribute('x')) - 500) < 10) {
+                            title = text.textContent;
+                        }
+                    });
+                    
+                    // 添加提示效果
+                    if (title) {
+                        this.setAttribute('data-original-fill', this.getAttribute('fill'));
+                        this.setAttribute('fill', '#e6f7ff');
+                    }
+                });
+                
+                node.addEventListener('mouseleave', function() {
+                    this.style.filter = 'drop-shadow(0 3px 6px rgba(42, 125, 225, 0.1))';
+                    this.style.strokeWidth = '2';
+                    
+                    // 恢复原始颜色
+                    const originalFill = this.getAttribute('data-original-fill');
+                    if (originalFill) {
+                        this.setAttribute('fill', originalFill);
+                    }
+                });
+                
+                // 点击查看详细信息
+                node.addEventListener('click', function() {
+                    const textElements = this.parentNode.querySelectorAll('text');
+                    let title = '', desc = '';
+                    textElements.forEach(text => {
+                        if (text.classList.contains('node-title') && 
+                            Math.abs(parseInt(text.getAttribute('x')) - 500) < 10) {
+                            title = text.textContent;
+                        } else if (text.classList.contains('node-desc') && !desc && 
+                                   Math.abs(parseInt(text.getAttribute('x')) - 500) < 10) {
+                            desc = text.textContent;
+                        }
+                    });
+                    
+                    if (title) {
+                        const stepNum = title.match(/^\d+/);
+                        const phaseTitle = getPhaseTitle(stepNum ? parseInt(stepNum[0]) : 0);
+                        
+                        alert(`📋 ${title}\n\n📝 ${desc || '详细信息'}\n\n🏷️ 所属阶段: ${phaseTitle}`);
+                    }
+                });
+            });
+            
+            // 获取阶段标题
+            function getPhaseTitle(stepNum) {
+                if (stepNum <= 3) return "第一阶段：事务开始";
+                if (stepNum <= 6) return "第二阶段：SQL执行准备";
+                if (stepNum <= 8) return "第三阶段：Undo Log生成";
+                if (stepNum <= 11) return "第四阶段：数据修改";
+                if (stepNum <= 13) return "第五阶段：Redo Log生成";
+                if (stepNum <= 16) return "第六阶段：事务提交";
+                if (stepNum <= 18) return "第七阶段：异步刷脏页";
+                return "第八阶段：清理阶段";
+            }
+            
+            // 自动调整视图
+            setTimeout(() => {
+                updateScrollPosition();
+            }, 200);
+            
+            // 添加键盘快捷键
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey) {
+                    if (e.key === '+' || e.key === '=') {
+                        e.preventDefault();
+                        document.getElementById('zoomIn').click();
+                    } else if (e.key === '-') {
+                        e.preventDefault();
+                        document.getElementById('zoomOut').click();
+                    } else if (e.key === '0') {
+                        e.preventDefault();
+                        document.getElementById('resetView').click();
+                    } else if (e.key === 's' || e.key === 'S') {
+                        e.preventDefault();
+                        document.getElementById('downloadSVG').click();
+                    } else if (e.key === 'i' || e.key === 'I') {
+                        e.preventDefault();
+                        document.getElementById('toggleInfo').click();
+                    }
+                }
+            });
+            
+            // 阶段标题交互
+            const phaseHeaders = document.querySelectorAll('.phase-header');
+            phaseHeaders.forEach(header => {
+                header.addEventListener('mouseenter', function() {
+                    this.style.fill = '#2a7de1';
+                    this.style.cursor = 'pointer';
+                });
+                
+                header.addEventListener('mouseleave', function() {
+                    this.style.fill = '#0d3c61';
+                });
+                
+                header.addEventListener('click', function() {
+                    const phaseText = this.textContent;
+                    alert(`📖 ${phaseText}\n\n点击查看该阶段的详细说明。`);
+                });
+            });
+            
+            // 信息框交互
+            const infoBoxes = document.querySelectorAll('.info-box');
+            infoBoxes.forEach(box => {
+                box.addEventListener('mouseenter', function() {
+                    this.style.filter = 'drop-shadow(0 6px 15px rgba(145, 213, 255, 0.3))';
+                    this.style.strokeWidth = '3';
+                });
+                
+                box.addEventListener('mouseleave', function() {
+                    this.style.filter = 'drop-shadow(0 3px 8px rgba(145, 213, 255, 0.2))';
+                    this.style.strokeWidth = '2';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

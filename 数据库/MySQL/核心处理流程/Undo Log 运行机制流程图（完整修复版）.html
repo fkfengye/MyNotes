@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Undo Log 运行机制流程图（完整修复版）</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border-radius: 3px;
+        }
+        
+        .flowchart-container {
+            width: 100%;
+            height: 700px;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+            padding: 10px;
+        }
+        
+        svg {
+            display: block;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+        
+        .stage-title {
+            font-size: 18px;
+            font-weight: bold;
+            fill: #2c3e50;
+            text-anchor: middle;
+        }
+        
+        .process-rect {
+            stroke-width: 2;
+            stroke: #2c3e50;
+            rx: 8;
+            ry: 8;
+        }
+        
+        .decision-diamond {
+            stroke-width: 2;
+            stroke: #2c3e50;
+        }
+        
+        .arrow {
+            stroke-width: 2;
+            marker-end: url(#arrowhead);
+        }
+        
+        .arrow-label {
+            font-size: 13px;
+            fill: #444;
+        }
+        
+        .note-box {
+            fill: #fff9e6;
+            stroke: #f1c40f;
+            stroke-width: 1.5;
+            rx: 6;
+            ry: 6;
+        }
+        
+        .note-text {
+            font-size: 12px;
+            fill: #7d6608;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 15px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .description {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .description h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        .description ul {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .description li {
+            margin-bottom: 8px;
+        }
+        
+        .highlight {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        .phase-container {
+            margin-bottom: 25px;
+        }
+        
+        .stage-label {
+            font-size: 16px;
+            font-weight: bold;
+            fill: #fff;
+            text-anchor: middle;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .legend {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            button {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Undo Log 运行机制流程图（完整修复版）</h1>
+        <p class="subtitle">基于 InnoDB 存储引擎的 Undo Log 生命周期与工作机制</p>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #d5e8d4;"></div>
+                <span>Undo Log 生成阶段</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ffe6cc;"></div>
+                <span>事务回滚阶段</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #dae8fc;"></div>
+                <span>Undo Log 回收阶段</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e1d5e7;"></div>
+                <span>MVCC 历史版本访问</span>
+            </div>
+        </div>
+        
+        <div class="flowchart-container">
+            <svg id="flowchart" width="2400" height="2000" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#2c3e50"/>
+                    </marker>
+                    <linearGradient id="phase1-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#d5e8d4;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#b1d4b0;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="phase2-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#ffe6cc;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#ffcc99;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="phase3-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#dae8fc;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#b8cff9;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="phase4-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#e1d5e7;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#d0bcdd;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                
+                <!-- 阶段标题 -->
+                <text x="1200" y="50" class="stage-title">Undo Log 运行机制流程图</text>
+                
+                <!-- 第一阶段：Undo Log 生成 -->
+                <rect x="100" y="100" width="2200" height="400" fill="url(#phase1-gradient)" stroke="#2c3e50" stroke-width="2" rx="10" ry="10" opacity="0.8"/>
+                <rect x="150" y="120" width="200" height="40" fill="#27ae60" rx="5" ry="5"/>
+                <text x="250" y="145" class="stage-label">阶段1：Undo Log 生成</text>
+                
+                <!-- 第一阶段流程 -->
+                <rect x="200" y="200" width="300" height="80" class="process-rect" fill="#f0f9eb"/>
+                <text x="350" y="230" text-anchor="middle" font-weight="bold">事务开始</text>
+                <text x="350" y="255" text-anchor="middle" font-size="13">BEGIN / START TRANSACTION</text>
+                
+                <path d="M 350 280 L 350 320" class="arrow" fill="none" stroke="#2c3e50"/>
+                <text x="370" y="305" class="arrow-label">执行写操作</text>
+                
+                <rect x="200" y="320" width="300" height="80" class="process-rect" fill="#f0f9eb"/>
+                <text x="350" y="350" text-anchor="middle" font-weight="bold">判断操作类型</text>
+                <text x="350" y="375" text-anchor="middle" font-size="13">INSERT / UPDATE / DELETE</text>
+                
+                <!-- INSERT 分支 -->
+                <path d="M 350 400 L 350 440" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="200" y="440" width="300" height="120" class="process-rect" fill="#f0f9eb"/>
+                <text x="350" y="470" text-anchor="middle" font-weight="bold">INSERT 操作</text>
+                <text x="350" y="495" text-anchor="middle" font-size="12">生成「插入型 Undo Log」</text>
+                <text x="350" y="520" text-anchor="middle" font-size="12">记录插入数据的完整信息</text>
+                <text x="350" y="545" text-anchor="middle" font-size="12">事务提交后立即可回收</text>
+                
+                <path d="M 350 560 L 350 600" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="200" y="600" width="300" height="60" class="process-rect" fill="#f0f9eb"/>
+                <text x="350" y="630" text-anchor="middle" font-size="13">聚簇索引行 DB_TRX_ID 设为当前事务ID</text>
+                
+                <!-- UPDATE/DELETE 分支 -->
+                <rect x="600" y="320" width="300" height="80" class="process-rect" fill="#f0f9eb"/>
+                <text x="750" y="350" text-anchor="middle" font-weight="bold">UPDATE/DELETE 操作</text>
+                <text x="750" y="375" text-anchor="middle" font-size="13">生成「更新型 Undo Log」</text>
+                
+                <path d="M 750 400 L 750 440" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="600" y="440" width="300" height="120" class="process-rect" fill="#f0f9eb"/>
+                <text x="750" y="470" text-anchor="middle" font-weight="bold">记录数据修改前旧值</text>
+                <text x="750" y="495" text-anchor="middle" font-size="12">UPDATE：字段旧值</text>
+                <text x="750" y="520" text-anchor="middle" font-size="12">DELETE：完整行数据（标记删除）</text>
+                <text x="750" y="545" text-anchor="middle" font-size="12">通过 DB_ROLL_PTR 形成版本链</text>
+                
+                <path d="M 750 560 L 750 600" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="600" y="600" width="300" height="60" class="process-rect" fill="#f0f9eb"/>
+                <text x="750" y="630" text-anchor="middle" font-size="13">DB_ROLL_PTR 指向新生成的 Undo Log</text>
+                
+                <!-- 连接两个分支 -->
+                <path d="M 500 360 Q 550 360 550 320 Q 550 280 600 280" class="arrow" fill="none" stroke="#2c3e50" stroke-dasharray="5,5"/>
+                <text x="525" y="340" class="arrow-label" font-size="11">UPDATE/DELETE 路径</text>
+                
+                <!-- WAL 原则说明 -->
+                <rect x="1000" y="200" width="400" height="160" class="note-box"/>
+                <text x="1200" y="230" text-anchor="middle" font-weight="bold" class="note-text">WAL 原则（先写日志，再改数据）</text>
+                <text x="1200" y="260" text-anchor="middle" font-size="12" class="note-text">1. 先生成 Undo Log</text>
+                <text x="1200" y="285" text-anchor="middle" font-size="12" class="note-text">2. 再修改数据页</text>
+                <text x="1200" y="310" text-anchor="middle" font-size="12" class="note-text">3. 保证事务原子性和持久性</text>
+                <text x="1200" y="335" text-anchor="middle" font-size="12" class="note-text">4. 支持事务回滚和 MVCC</text>
+                
+                <!-- 版本链说明 -->
+                <rect x="1500" y="200" width="400" height="160" class="note-box"/>
+                <text x="1700" y="230" text-anchor="middle" font-weight="bold" class="note-text">版本链形成</text>
+                <text x="1700" y="260" text-anchor="middle" font-size="12" class="note-text">• DB_ROLL_PTR 指向 Undo Log 记录</text>
+                <text x="1700" y="285" text-anchor="middle" font-size="12" class="note-text">• Undo Log 通过 roll_ptr 串联成链</text>
+                <text x="1700" y="310" text-anchor="middle" font-size="12" class="note-text">• 每个历史版本都有 DB_TRX_ID</text>
+                <text x="1700" y="335" text-anchor="middle" font-size="12" class="note-text">• 支持按事务ID回溯历史版本</text>
+                
+                <!-- 第二阶段：事务回滚 -->
+                <rect x="100" y="700" width="2200" height="400" fill="url(#phase2-gradient)" stroke="#2c3e50" stroke-width="2" rx="10" ry="10" opacity="0.8"/>
+                <rect x="150" y="720" width="200" height="40" fill="#e67e22" rx="5" ry="5"/>
+                <text x="250" y="745" class="stage-label">阶段2：事务回滚</text>
+                
+                <!-- 第二阶段流程 -->
+                <rect x="200" y="800" width="300" height="80" class="process-rect" fill="#fff5e6"/>
+                <text x="350" y="830" text-anchor="middle" font-weight="bold">事务异常或 ROLLBACK</text>
+                <text x="350" y="855" text-anchor="middle" font-size="13">异常：断电、死锁等</text>
+                
+                <path d="M 350 880 L 350 920" class="arrow" fill="none" stroke="#2c3e50"/>
+                <text x="370" y="905" class="arrow-label">启动回滚流程</text>
+                
+                <rect x="200" y="920" width="300" height="80" class="process-rect" fill="#fff5e6"/>
+                <text x="350" y="950" text-anchor="middle" font-weight="bold">定位 Undo 链</text>
+                <text x="350" y="975" text-anchor="middle" font-size="13">通过 prev_undo_no 串联的所有记录</text>
+                
+                <path d="M 350 1000 L 350 1040" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="200" y="1040" width="300" height="80" class="process-rect" fill="#fff5e6"/>
+                <text x="350" y="1070" text-anchor="middle" font-weight="bold">逆序遍历 Undo 链</text>
+                <text x="350" y="1095" text-anchor="middle" font-size="13">从最新到最早执行反向操作</text>
+                
+                <!-- 回滚操作类型 -->
+                <rect x="600" y="800" width="300" height="80" class="process-rect" fill="#fff5e6"/>
+                <text x="750" y="830" text-anchor="middle" font-weight="bold">INSERT 型 Undo Log</text>
+                <text x="750" y="855" text-anchor="middle" font-size="13">反向操作：删除插入的数据</text>
+                
+                <rect x="600" y="920" width="300" height="80" class="process-rect" fill="#fff5e6"/>
+                <text x="750" y="950" text-anchor="middle" font-weight="bold">UPDATE 型 Undo Log</text>
+                <text x="750" y="975" text-anchor="middle" font-size="13">反向操作：恢复为 old_values</text>
+                
+                <rect x="600" y="1040" width="300" height="80" class="process-rect" fill="#fff5e6"/>
+                <text x="750" y="1070" text-anchor="middle" font-weight="bold">DELETE 型 Undo Log</text>
+                <text x="750" y="1095" text-anchor="middle" font-size="13">反向操作：恢复标记删除的数据</text>
+                
+                <!-- 连接到回滚操作 -->
+                <path d="M 500 1080 Q 550 1080 550 1040 Q 550 1000 600 960" class="arrow" fill="none" stroke="#2c3e50"/>
+                <text x="525" y="1030" class="arrow-label">执行反向操作</text>
+                
+                <!-- 回滚完成 -->
+                <rect x="1000" y="920" width="300" height="80" class="process-rect" fill="#fff5e6"/>
+                <text x="1150" y="950" text-anchor="middle" font-weight="bold">回滚完成</text>
+                <text x="1150" y="975" text-anchor="middle" font-size="13">数据恢复到事务启动前状态</text>
+                
+                <path d="M 800 1120 L 1000 1120" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="1400" y="920" width="300" height="80" class="process-rect" fill="#fff5e6"/>
+                <text x="1550" y="950" text-anchor="middle" font-weight="bold">释放 Undo 段</text>
+                <text x="1550" y="975" text-anchor="middle" font-size="13">标记 Undo Log 为可回收</text>
+                
+                <!-- 示例说明 -->
+                <rect x="1000" y="800" width="800" height="100" class="note-box"/>
+                <text x="1400" y="825" text-anchor="middle" font-weight="bold" class="note-text">回滚示例</text>
+                <text x="1400" y="850" text-anchor="middle" font-size="12" class="note-text">事务 T1: UPDATE name='A'→'B'→'C'</text>
+                <text x="1400" y="875" text-anchor="middle" font-size="12" class="note-text">Undo 链: 记录2(name='A') → 记录1(name='B')</text>
+                <text x="1400" y="900" text-anchor="middle" font-size="12" class="note-text">回滚: 先通过记录1回滚为'B'，再通过记录2回滚为'A'</text>
+                
+                <!-- 连接第一阶段到第二阶段 -->
+                <path d="M 350 660 L 350 700" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="370" y="680" class="arrow-label">事务异常或显式回滚</text>
+                
+                <!-- 第三阶段：Undo Log 回收 -->
+                <rect x="100" y="1150" width="2200" height="400" fill="url(#phase3-gradient)" stroke="#2c3e50" stroke-width="2" rx="10" ry="10" opacity="0.8"/>
+                <rect x="150" y="1170" width="200" height="40" fill="#3498db" rx="5" ry="5"/>
+                <text x="250" y="1195" class="stage-label">阶段3：日志回收</text>
+                
+                <!-- 第三阶段流程 -->
+                <rect x="200" y="1250" width="300" height="80" class="process-rect" fill="#e8f0fc"/>
+                <text x="350" y="1280" text-anchor="middle" font-weight="bold">事务提交</text>
+                <text x="350" y="1305" text-anchor="middle" font-size="13">COMMIT</text>
+                
+                <path d="M 350 1330 L 350 1370" class="arrow" fill="none" stroke="#2c3e50"/>
+                <text x="370" y="1355" class="arrow-label">启动回收判断</text>
+                
+                <rect x="200" y="1370" width="300" height="80" class="process-rect" fill="#e8f0fc"/>
+                <text x="350" y="1400" text-anchor="middle" font-weight="bold">判断 Undo Log 类型</text>
+                <text x="350" y="1425" text-anchor="middle" font-size="13">插入型 / 更新型</text>
+                
+                <!-- 插入型路径 -->
+                <path d="M 350 1450 L 350 1490" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="200" y="1490" width="300" height="80" class="process-rect" fill="#e8f0fc"/>
+                <text x="350" y="1520" text-anchor="middle" font-weight="bold">插入型 Undo Log</text>
+                <text x="350" y="1545" text-anchor="middle" font-size="13">事务提交后立即满足回收条件</text>
+                
+                <path d="M 350 1570 L 350 1610" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="200" y="1610" width="300" height="80" class="process-rect" fill="#e8f0fc"/>
+                <text x="350" y="1640" text-anchor="middle" font-weight="bold">标记为可回收</text>
+                <text x="350" y="1665" text-anchor="middle" font-size="13">无任何依赖，可立即回收</text>
+                
+                <!-- 更新型路径 -->
+                <rect x="600" y="1370" width="300" height="80" class="process-rect" fill="#e8f0fc"/>
+                <text x="750" y="1400" text-anchor="middle" font-weight="bold">更新型 Undo Log</text>
+                <text x="750" y="1425" text-anchor="middle" font-size="13">需等待所有引用该版本的 Read View 销毁</text>
+                
+                <path d="M 750 1450 L 750 1490" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="600" y="1490" width="300" height="100" class="process-rect" fill="#e8f0fc"/>
+                <text x="750" y="1520" text-anchor="middle" font-weight="bold">检查 Read View 状态</text>
+                <text x="750" y="1545" text-anchor="middle" font-size="12">是否有事务依赖此历史版本</text>
+                <text x="750" y="1570" text-anchor="middle" font-size="12">等待所有相关 Read View 销毁</text>
+                
+                <path d="M 750 1590 L 750 1630" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="600" y="1630" width="300" height="80" class="process-rect" fill="#e8f0fc"/>
+                <text x="750" y="1660" text-anchor="middle" font-weight="bold">满足回收条件</text>
+                <text x="750" y="1685" text-anchor="middle" font-size="13">事务已提交且无 Read View 依赖</text>
+                
+                <!-- 合并路径 -->
+                <rect x="1000" y="1490" width="300" height="80" class="process-rect" fill="#e8f0fc"/>
+                <text x="1150" y="1520" text-anchor="middle" font-weight="bold">满足回收条件</text>
+                <text x="1150" y="1545" text-anchor="middle" font-size="13">事务已提交且无 Read View 依赖</text>
+                
+                <!-- 连接路径 -->
+                <path d="M 500 1530 Q 550 1530 550 1530 Q 550 1530 600 1530" class="arrow" fill="none" stroke="#2c3e50"/>
+                <path d="M 900 1530 L 1000 1530" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <!-- Purge 线程 -->
+                <path d="M 1150 1570 L 1150 1630" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="1000" y="1630" width="300" height="120" class="process-rect" fill="#e8f0fc"/>
+                <text x="1150" y="1655" text-anchor="middle" font-weight="bold">purge 线程异步回收</text>
+                <text x="1150" y="1680" text-anchor="middle" font-size="12">1. 扫描 Undo 表空间中的 Undo 段</text>
+                <text x="1150" y="1705" text-anchor="middle" font-size="12">2. 标记可回收页为"可复用"</text>
+                <text x="1150" y="1730" text-anchor="middle" font-size="12">3. 物理删除 DELETE 标记的行</text>
+                
+                <!-- 隔离级别影响 -->
+                <rect x="1400" y="1250" width="400" height="160" class="note-box"/>
+                <text x="1600" y="1275" text-anchor="middle" font-weight="bold" class="note-text">隔离级别对回收的影响</text>
+                <text x="1600" y="1305" text-anchor="middle" font-size="12" class="note-text">• RC 级别：语句级 Read View</text>
+                <text x="1600" y="1330" text-anchor="middle" font-size="12" class="note-text">  执行后立即销毁，回收快</text>
+                <text x="1600" y="1355" text-anchor="middle" font-size="12" class="note-text">• RR 级别：事务级 Read View</text>
+                <text x="1600" y="1380" text-anchor="middle" font-size="12" class="note-text">  事务提交才销毁，避免长事务</text>
+                <text x="1600" y="1405" text-anchor="middle" font-size="12" class="note-text">• 长事务会导致 Undo 表空间膨胀</text>
+                
+                <!-- 连接第二阶段到第三阶段 -->
+                <path d="M 1150 1100 L 1150 1150" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1170" y="1125" class="arrow-label">事务正常提交</text>
+                
+                <!-- 第四阶段：MVCC 历史版本访问 -->
+                <rect x="100" y="1600" width="2200" height="350" fill="url(#phase4-gradient)" stroke="#2c3e50" stroke-width="2" rx="10" ry="10" opacity="0.8"/>
+                <rect x="150" y="1620" width="200" height="40" fill="#9b59b6" rx="5" ry="5"/>
+                <text x="250" y="1645" class="stage-label">阶段4：MVCC 访问</text>
+                
+                <!-- 第四阶段流程 -->
+                <rect x="200" y="1700" width="300" height="80" class="process-rect" fill="#f2e6f9"/>
+                <text x="350" y="1730" text-anchor="middle" font-weight="bold">事务执行 SELECT（快照读）</text>
+                <text x="350" y="1755" text-anchor="middle" font-size="13">普通 SELECT，非加锁读</text>
+                
+                <path d="M 350 1780 L 350 1820" class="arrow" fill="none" stroke="#2c3e50"/>
+                <text x="370" y="1805" class="arrow-label">获取当前数据版本</text>
+                
+                <rect x="200" y="1820" width="300" height="80" class="process-rect" fill="#f2e6f9"/>
+                <text x="350" y="1850" text-anchor="middle" font-weight="bold">检查数据版本可见性</text>
+                <text x="350" y="1875" text-anchor="middle" font-size="13">通过 Read View 判断</text>
+                
+                <!-- 可见路径 -->
+                <path d="M 350 1900 L 350 1940" class="arrow" fill="none" stroke="#2c3e50"/>
+                <text x="370" y="1925" class="arrow-label">版本可见</text>
+                
+                <rect x="200" y="1940" width="300" height="60" class="process-rect" fill="#f2e6f9"/>
+                <text x="350" y="1970" text-anchor="middle" font-size="13">直接返回当前版本数据</text>
+                
+                <!-- 不可见路径 -->
+                <rect x="600" y="1820" width="300" height="80" class="process-rect" fill="#f2e6f9"/>
+                <text x="750" y="1850" text-anchor="middle" font-weight="bold">版本不可见</text>
+                <text x="750" y="1875" text-anchor="middle" font-size="13">DB_TRX_ID > Read View 中最小事务ID</text>
+                
+                <path d="M 750 1900 L 750 1940" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <rect x="600" y="1940" width="300" height="100" class="process-rect" fill="#f2e6f9"/>
+                <text x="750" y="1965" text-anchor="middle" font-weight="bold">通过 DB_ROLL_PTR 访问 Undo Log</text>
+                <text x="750" y="1990" text-anchor="middle" font-size="12">获取历史版本数据 (old_values)</text>
+                <text x="750" y="2015" text-anchor="middle" font-size="12">通过 roll_ptr 访问上一个版本</text>
+                
+                <path d="M 750 2040 L 750 2080" class="arrow" fill="none" stroke="#2c3e50"/>
+                <text x="770" y="2065" class="arrow-label">回溯版本链</text>
+                
+                <rect x="600" y="2080" width="300" height="80" class="process-rect" fill="#f2e6f9"/>
+                <text x="750" y="2110" text-anchor="middle" font-weight="bold">找到可见的历史版本</text>
+                <text x="750" y="2135" text-anchor="middle" font-size="13">Read View 判定可见</text>
+                
+                <!-- 连接路径 -->
+                <path d="M 500 1860 Q 550 1860 550 1830 Q 550 1800 600 1830" class="arrow" fill="none" stroke="#2c3e50"/>
+                <text x="525" y="1820" class="arrow-label">版本不可见</text>
+                
+                <!-- 返回数据 -->
+                <rect x="1000" y="1940" width="300" height="80" class="process-rect" fill="#f2e6f9"/>
+                <text x="1150" y="1970" text-anchor="middle" font-weight="bold">返回历史版本数据</text>
+                <text x="1150" y="1995" text-anchor="middle" font-size="13">无需加锁（快照读）</text>
+                
+                <path d="M 900 2020 L 1000 2020" class="arrow" fill="none" stroke="#2c3e50"/>
+                <path d="M 500 1980 Q 550 1980 550 2020 Q 550 2020 350 2020" class="arrow" fill="none" stroke="#2c3e50"/>
+                
+                <!-- MVCC 示例 -->
+                <rect x="1400" y="1700" width="400" height="160" class="note-box"/>
+                <text x="1600" y="1725" text-anchor="middle" font-weight="bold" class="note-text">MVCC 示例</text>
+                <text x="1600" y="1755" text-anchor="middle" font-size="12" class="note-text">事务 T2 (RR) 启动后：</text>
+                <text x="1600" y="1780" text-anchor="middle" font-size="12" class="note-text">T1 修改 id=1 为 name='B' 并提交</text>
+                <text x="1600" y="1805" text-anchor="middle" font-size="12" class="note-text">T2 查询 id=1：</text>
+                <text x="1600" y="1830" text-anchor="middle" font-size="12" class="note-text">当前版本 DB_TRX_ID=100 不可见</text>
+                <text x="1600" y="1855" text-anchor="middle" font-size="12" class="note-text">回溯 Undo Log 找到 name='A' 返回</text>
+                
+                <!-- 连接第三阶段到第四阶段 -->
+                <path d="M 1150 1750 L 1150 1600" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1170" y="1675" class="arrow-label">事务查询时</text>
+                
+                <!-- 整体流程箭头 -->
+                <path d="M 350 1250 L 350 1150" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="370" y="1200" class="arrow-label">事务正常提交</text>
+                
+                <!-- 最终完成 -->
+                <rect x="1800" y="1250" width="300" height="80" class="process-rect" fill="#e8f4fd"/>
+                <text x="1950" y="1280" text-anchor="middle" font-weight="bold">Undo Log 生命周期完成</text>
+                <text x="1950" y="1305" text-anchor="middle" font-size="13">生成 → 使用 → 回收 → 复用</text>
+            </svg>
+        </div>
+        
+        <div class="controls">
+            <button id="zoomIn">放大</button>
+            <button id="zoomOut">缩小</button>
+            <button id="resetView">重置视图</button>
+            <button id="downloadSVG">下载SVG</button>
+        </div>
+        
+        <div class="description">
+            <h3>Undo Log 运行机制关键点说明</h3>
+            <div class="phase-container">
+                <h4>阶段1：Undo Log 生成（事务执行时）</h4>
+                <ul>
+                    <li><span class="highlight">WAL原则</span>：先写日志（Undo Log），再修改数据页，保证事务原子性。</li>
+                    <li><span class="highlight">INSERT操作</span>：生成插入型Undo Log，记录完整插入数据，事务提交后立即可回收。</li>
+                    <li><span class="highlight">UPDATE/DELETE操作</span>：生成更新型Undo Log，记录修改前旧值，通过DB_ROLL_PTR形成版本链。</li>
+                    <li><span class="highlight">DELETE是标记删除</span>：物理删除由purge线程在Undo Log回收时执行。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-container">
+                <h4>阶段2：事务回滚（事务异常/rollback时）</h4>
+                <ul>
+                    <li><span class="highlight">逆序遍历</span>：从最新的Undo Log记录开始，按相反顺序执行反向操作。</li>
+                    <li><span class="highlight">反向操作</span>：INSERT反向是删除，UPDATE反向是恢复旧值，DELETE反向是恢复标记删除。</li>
+                    <li><span class="highlight">原子性保证</span>：通过Undo Log确保事务要么全部完成，要么全部回滚。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-container">
+                <h4>阶段3：Undo Log回收（事务提交后）</h4>
+                <ul>
+                    <li><span class="highlight">回收条件</span>：事务已提交且无任何Read View依赖该Undo Log的历史版本。</li>
+                    <li><span class="highlight">purge线程</span>：后台异步回收，标记可复用页，执行DELETE的物理删除。</li>
+                    <li><span class="highlight">隔离级别影响</span>：RC级别回收快，RR级别可能因长事务导致Undo表空间膨胀。</li>
+                </ul>
+            </div>
+            
+            <div class="phase-container">
+                <h4>阶段4：MVCC历史版本访问（事务查询时）</h4>
+                <ul>
+                    <li><span class="highlight">快照读</span>：普通SELECT通过Undo Log访问历史版本，无需加锁。</li>
+                    <li><span class="highlight">版本链回溯</span>：通过DB_ROLL_PTR指针沿Undo Log版本链查找可见的历史版本。</li>
+                    <li><span class="highlight">Read View</span>：判断数据版本可见性的关键机制，不同隔离级别创建时机不同。</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const svg = document.getElementById('flowchart');
+            let scale = 1;
+            const scaleStep = 0.1;
+            const container = document.querySelector('.flowchart-container');
+            
+            // 缩放功能
+            document.getElementById('zoomIn').addEventListener('click', function() {
+                scale += scaleStep;
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transformOrigin = 'top left';
+            });
+            
+            document.getElementById('zoomOut').addEventListener('click', function() {
+                if (scale > scaleStep) {
+                    scale -= scaleStep;
+                    svg.style.transform = `scale(${scale})`;
+                    svg.style.transformOrigin = 'top left';
+                }
+            });
+            
+            document.getElementById('resetView').addEventListener('click', function() {
+                scale = 1;
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transformOrigin = 'top left';
+                container.scrollTop = 0;
+                container.scrollLeft = 0;
+            });
+            
+            // 下载SVG功能
+            document.getElementById('downloadSVG').addEventListener('click', function() {
+                const serializer = new XMLSerializer();
+                const source = serializer.serializeToString(svg);
+                
+                // 添加命名空间
+                if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+                    source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+                }
+                if (!source.match(/^<svg[^>]+"http\:\/\/www\.w3\.org\/1999\/xlink"/)) {
+                    source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+                }
+                
+                const svgBlob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+                const url = URL.createObjectURL(svgBlob);
+                
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = 'undo-log-mechanism-flowchart-complete.svg';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+            });
+            
+            // 添加SVG交互效果
+            const processRects = document.querySelectorAll('.process-rect');
+            processRects.forEach(rect => {
+                rect.addEventListener('mouseenter', function() {
+                    this.style.filter = 'brightness(0.95)';
+                    this.style.strokeWidth = '3';
+                });
+                
+                rect.addEventListener('mouseleave', function() {
+                    this.style.filter = 'brightness(1)';
+                    this.style.strokeWidth = '2';
+                });
+            });
+            
+            // 添加文本交互效果
+            const textElements = document.querySelectorAll('text');
+            textElements.forEach(text => {
+                text.addEventListener('mouseenter', function() {
+                    const parentRect = this.previousElementSibling;
+                    if (parentRect && parentRect.classList.contains('process-rect')) {
+                        parentRect.style.filter = 'brightness(0.95)';
+                        parentRect.style.strokeWidth = '3';
+                    }
+                });
+                
+                text.addEventListener('mouseleave', function() {
+                    const parentRect = this.previousElementSibling;
+                    if (parentRect && parentRect.classList.contains('process-rect')) {
+                        parentRect.style.filter = 'brightness(1)';
+                        parentRect.style.strokeWidth = '2';
+                    }
+                });
+            });
+            
+            // 自动滚动到中心
+            setTimeout(() => {
+                container.scrollLeft = (svg.clientWidth - container.clientWidth) / 2;
+                container.scrollTop = (svg.clientHeight - container.clientHeight) / 3;
+            }, 100);
+        });
+    </script>
+</body>
+</html>

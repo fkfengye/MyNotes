@@ -1,0 +1,417 @@
+<svg width="2000" height="3400" xmlns="http://www.w3.org/2000/svg">
+  <!-- 标题 -->
+  <text x="1000" y="70" text-anchor="middle" font-size="36" font-weight="bold" fill="#333">InnoDB「段-区-页」三级存储模型</text>
+  <text x="1000" y="110" text-anchor="middle" font-size="20" fill="#666">Segment - Extent - Page 层次化存储架构</text>
+  
+  <!-- ========== 第一部分：存储模型概览 ========== -->
+  <rect x="100" y="140" width="1800" height="150" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="2"/>
+  <text x="1000" y="170" text-anchor="middle" font-size="28" font-weight="bold" fill="#2d4cd2">InnoDB存储模型概览</text>
+  
+  <g font-size="18" fill="#333">
+    <text x="200" y="210">✓ 段（Segment）：逻辑存储单元，如数据段、索引段</text>
+    <text x="200" y="240">✓ 区（Extent）：物理分配单元，由连续的页组成</text>
+    <text x="200" y="270">✓ 页（Page）：最小磁盘管理单元，固定16KB</text>
+    <text x="1000" y="210">✓ 表空间（Tablespace）：文件的逻辑集合</text>
+    <text x="1000" y="240">✓ 文件（File）：物理磁盘文件</text>
+    <text x="1000" y="270">✓ 块（Block）：磁盘最小读写单元（通常512B/4KB）</text>
+  </g>
+  
+  <!-- ========== 第二部分：完整存储层次结构 ========== -->
+  <rect x="100" y="310" width="1800" height="750" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="340" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">InnoDB完整存储层次结构</text>
+  
+  <!-- 存储层次金字塔 -->
+  <g transform="translate(400, 390)">
+    <!-- 第6层：数据库 -->
+    <rect width="1200" height="80" rx="8" ry="8" fill="#4a6bff" stroke="#2d4cd2" stroke-width="3"/>
+    <text x="600" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="white">数据库（Database）</text>
+    <text x="600" y="55" text-anchor="middle" font-size="16" fill="#ccccff">包含多个表空间</text>
+    
+    <!-- 箭头 -->
+    <path d="M600,80 L600,100" stroke="#4a6bff" stroke-width="3" fill="none"/>
+    <polygon points="600,100 595,95 605,95" fill="#4a6bff"/>
+    
+    <!-- 第5层：表空间 -->
+    <rect y="120" width="1200" height="80" rx="8" ry="8" fill="#4a6bff" stroke="#2d4cd2" stroke-width="2" opacity="0.9"/>
+    <text x="600" y="155" text-anchor="middle" font-size="22" font-weight="bold" fill="white">表空间（Tablespace）</text>
+    <text x="600" y="180" text-anchor="middle" font-size="15" fill="#ccccff">如ibdata1, user.ibd, undo_001等</text>
+    
+    <!-- 箭头 -->
+    <path d="M600,200 L600,220" stroke="#4a6bff" stroke-width="3" fill="none"/>
+    <polygon points="600,220 595,215 605,215" fill="#4a6bff"/>
+    
+    <!-- 第4层：段 -->
+    <rect y="240" width="1200" height="80" rx="8" ry="8" fill="#4a6bff" stroke="#2d4cd2" stroke-width="2" opacity="0.8"/>
+    <text x="600" y="275" text-anchor="middle" font-size="22" font-weight="bold" fill="white">段（Segment）</text>
+    <text x="600" y="300" text-anchor="middle" font-size="15" fill="#ccccff">逻辑存储单元：数据段、索引段、回滚段等</text>
+    
+    <!-- 箭头 -->
+    <path d="M600,320 L600,340" stroke="#4a6bff" stroke-width="3" fill="none"/>
+    <polygon points="600,340 595,335 605,335" fill="#4a6bff"/>
+    
+    <!-- 第3层：区 -->
+    <rect y="360" width="1200" height="80" rx="8" ry="8" fill="#ff8a3d" stroke="#cc5a1a" stroke-width="2"/>
+    <text x="600" y="395" text-anchor="middle" font-size="22" font-weight="bold" fill="white">区（Extent）</text>
+    <text x="600" y="420" text-anchor="middle" font-size="15" fill="#fff0e6">物理分配单元，1MB（64个连续页）</text>
+    
+    <!-- 箭头 -->
+    <path d="M600,440 L600,460" stroke="#ff8a3d" stroke-width="3" fill="none"/>
+    <polygon points="600,460 595,455 605,455" fill="#ff8a3d"/>
+    
+    <!-- 第2层：页 -->
+    <rect y="480" width="1200" height="80" rx="8" ry="8" fill="#34c759" stroke="#1e7a34" stroke-width="2"/>
+    <text x="600" y="515" text-anchor="middle" font-size="22" font-weight="bold" fill="white">页（Page）</text>
+    <text x="600" y="540" text-anchor="middle" font-size="15" fill="#e6ffe6">最小磁盘管理单元，16KB固定大小</text>
+    
+    <!-- 箭头 -->
+    <path d="M600,560 L600,580" stroke="#34c759" stroke-width="3" fill="none"/>
+    <polygon points="600,580 595,575 605,575" fill="#34c759"/>
+    
+    <!-- 第1层：行 -->
+    <rect y="600" width="1200" height="80" rx="8" ry="8" fill="#666" stroke="#333" stroke-width="2"/>
+    <text x="600" y="635" text-anchor="middle" font-size="22" font-weight="bold" fill="white">行（Row）</text>
+    <text x="600" y="660" text-anchor="middle" font-size="15" fill="#f0f0f0">实际数据存储，变长记录</text>
+  </g>
+  
+  <!-- 层次说明 -->
+  <rect x="300" y="1040" width="1400" height="100" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+  <text x="1000" y="1070" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">存储层次关键特性</text>
+  
+  <g font-size="16" fill="#333">
+    <text x="350" y="1100">• 上层是逻辑概念，下层是物理实现</text>
+    <text x="350" y="1125">• 从上层向下层：逻辑 → 物理，抽象 → 具体</text>
+    <text x="1050" y="1100">• 从下层向上层：物理 → 逻辑，具体 → 抽象</text>
+    <text x="1050" y="1125">• 区是连续分配的基本单位，减少磁盘碎片</text>
+  </g>
+  
+  <!-- ========== 第三部分：段（Segment）详解 ========== -->
+  <rect x="100" y="1170" width="1800" height="470" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="1200" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">段（Segment）详解</text>
+  
+  <!-- 段的概念 -->
+  <g transform="translate(300, 1250)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#eef2ff" stroke="#4a6bff" stroke-width="2"/>
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#2d4cd2">段的概念</text>
+    <text x="700" y="60" text-anchor="middle" font-size="18">逻辑存储单元，一个段包含多个区（Extent）</text>
+    <text x="700" y="85" text-anchor="middle" font-size="16">每个索引（主键索引、二级索引）对应两个段：叶子节点段 + 非叶子节点段</text>
+  </g>
+  
+  <!-- 段的类型 -->
+  <g transform="translate(300, 1390)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">段的类型</text>
+    
+    <!-- 数据段（叶子节点段） -->
+    <g transform="translate(100, 50)">
+      <rect width="400" height="120" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+      <text x="200" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e7a34">数据段（叶子节点段）</text>
+      <text x="200" y="55" text-anchor="middle" font-size="16">Leaf Node Segment</text>
+      <text x="200" y="80" text-anchor="middle" font-size="14">存储B+树叶子节点的数据</text>
+      <text x="200" y="100" text-anchor="middle" font-size="13" fill="#666">包含完整的行记录</text>
+    </g>
+    
+    <!-- 索引段（非叶子节点段） -->
+    <g transform="translate(600, 50)">
+      <rect width="400" height="120" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+      <text x="200" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e7a34">索引段（非叶子节点段）</text>
+      <text x="200" y="55" text-anchor="middle" font-size="16">Non-Leaf Node Segment</text>
+      <text x="200" y="80" text-anchor="middle" font-size="14">存储B+树非叶子节点的索引</text>
+      <text x="200" y="100" text-anchor="middle" font-size="13" fill="#666">只存储键值和指针</text>
+    </g>
+    
+    <!-- 回滚段 -->
+    <g transform="translate(1100, 50)">
+      <rect width="400" height="120" rx="8" ry="8" fill="#ffebcc" stroke="#ff8a3d" stroke-width="2"/>
+      <text x="200" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#cc5a1a">回滚段（Undo Segment）</text>
+      <text x="200" y="55" text-anchor="middle" font-size="16">Rollback Segment</text>
+      <text x="200" y="80" text-anchor="middle" font-size="14">存储Undo Log记录</text>
+      <text x="200" y="100" text-anchor="middle" font-size="13" fill="#666">用于事务回滚和MVCC</text>
+    </g>
+  </g>
+  
+  <!-- 段的管理 -->
+  <g transform="translate(300, 1590)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+    <text x="700" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">段的管理机制</text>
+    
+    <g font-size="16" fill="#333">
+      <text x="100" y="65">• 每个段最初分配32个页（碎片页），用于小数据量存储</text>
+      <text x="100" y="90">• 当段增长超过32页后，以区（Extent）为单位分配空间</text>
+      <text x="100" y="115">• 段空间可以回收，但不会立即释放给操作系统</text>
+      <text x="100" y="140">• 段内维护空闲页列表，用于高效分配</text>
+    </g>
+  </g>
+  
+  <!-- ========== 第四部分：区（Extent）详解 ========== -->
+  <rect x="100" y="1670" width="1800" height="570" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="1700" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">区（Extent）详解</text>
+  
+  <!-- 区的概念 -->
+  <g transform="translate(300, 1770)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#ffefe6" stroke="#ff8a3d" stroke-width="2"/>
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#cc5a1a">区的概念</text>
+    <text x="700" y="60" text-anchor="middle" font-size="18">物理分配单元，由64个连续的页（Page）组成</text>
+    <text x="700" y="85" text-anchor="middle" font-size="16">固定大小：64 × 16KB = 1MB</text>
+    <text x="700" y="110" text-anchor="middle" font-size="16">目的是为了减少磁盘随机I/O，提高顺序读写性能</text>
+  </g>
+  
+  <!-- 区的结构 -->
+  <g transform="translate(300, 1910)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">区的结构（1MB = 64个连续页）</text>
+    
+    <!-- 区1 -->
+    <g transform="translate(100, 60)">
+      <rect width="800" height="120" rx="6" ry="6" fill="#ffebcc" stroke="#ff8a3d" stroke-width="2"/>
+      <text x="400" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#cc5a1a">区（Extent）- 1MB</text>
+      
+      <!-- 页网格 -->
+      <g transform="translate(50, 50)">
+        <!-- 行1 -->
+        <g transform="translate(0, 0)">
+          <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+          <text x="20" y="15" text-anchor="middle" font-size="10">页1</text>
+        </g>
+        
+        <g transform="translate(45, 0)">
+          <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+          <text x="20" y="15" text-anchor="middle" font-size="10">页2</text>
+        </g>
+        
+        <g transform="translate(90, 0)">
+          <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+          <text x="20" y="15" text-anchor="middle" font-size="10">页3</text>
+        </g>
+        
+        <!-- 省略号 -->
+        <g transform="translate(140, 0)">
+          <text x="0" y="15" text-anchor="start" font-size="12">...</text>
+        </g>
+        
+        <g transform="translate(170, 0)">
+          <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+          <text x="20" y="15" text-anchor="middle" font-size="10">页63</text>
+        </g>
+        
+        <g transform="translate(215, 0)">
+          <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+          <text x="20" y="15" text-anchor="middle" font-size="10">页64</text>
+        </g>
+      </g>
+      
+      <!-- 连续标记 -->
+      <g transform="translate(300, 40)">
+        <path d="M0,0 L0,40" stroke="#ff8a3d" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
+        <text x="10" y="20" text-anchor="start" font-size="12" font-weight="bold" fill="#ff8a3d">连续分配</text>
+      </g>
+    </g>
+    
+    <!-- 区2 -->
+    <g transform="translate(950, 60)">
+      <rect width="350" height="120" rx="6" ry="6" fill="#ffebcc" stroke="#ff8a3d" stroke-width="2"/>
+      <text x="175" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#cc5a1a">区（Extent）</text>
+      <text x="175" y="50" text-anchor="middle" font-size="14">1MB = 64个页</text>
+      
+      <g transform="translate(50, 60)">
+        <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+        <text x="20" y="15" text-anchor="middle" font-size="10">页1</text>
+      </g>
+      
+      <g transform="translate(100, 60)">
+        <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+        <text x="20" y="15" text-anchor="middle" font-size="10">页2</text>
+      </g>
+      
+      <g transform="translate(150, 60)">
+        <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+        <text x="20" y="15" text-anchor="middle" font-size="10">页3</text>
+      </g>
+      
+      <g transform="translate(200, 60)">
+        <rect width="40" height="25" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+        <text x="20" y="15" text-anchor="middle" font-size="10">页4</text>
+      </g>
+      
+      <g transform="translate(250, 60)">
+        <text x="0" y="15" text-anchor="start" font-size="12">...</text>
+      </g>
+    </g>
+  </g>
+  
+  <!-- 区的分配策略 -->
+  <g transform="translate(300, 2060)">
+    <rect width="1400" height="150" rx="8" ry="8" fill="#fff5f0" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="700" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#cc5a1a">区的分配策略</text>
+    
+    <g font-size="16" fill="#333">
+      <text x="100" y="65">• 初始分配：表创建时分配32个碎片页（Fragmented Pages）</text>
+      <text x="100" y="90">• 碎片页：当数据量小于32页时，使用碎片页存储</text>
+      <text x="100" y="115">• 区分配：当数据量超过32页后，以区为单位分配空间</text>
+      <text x="100" y="140">• 连续分配：区内的64个页在磁盘上连续存储</text>
+      <text x="100" y="165">• 预分配：InnoDB可能会预分配多个区以减少未来分配开销</text>
+    </g>
+  </g>
+  
+  <!-- ========== 第五部分：页（Page）详解 ========== -->
+  <rect x="100" y="2270" width="1800" height="800" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="2300" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">页（Page）详解</text>
+  
+  <!-- 页的概念 -->
+  <g transform="translate(300, 2370)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#1e7a34">页的概念</text>
+    <text x="700" y="60" text-anchor="middle" font-size="18">最小磁盘管理单元，固定大小16KB</text>
+    <text x="700" y="85" text-anchor="middle" font-size="16">所有I/O操作都以页为单位进行</text>
+    <text x="700" y="110" text-anchor="middle" font-size="16">内存中通过Buffer Pool缓存，减少磁盘I/O</text>
+  </g>
+  
+  <!-- 页的类型 -->
+  <g transform="translate(300, 2510)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">页的类型（共18种）</text>
+    
+    <!-- 主要页类型 -->
+    <g transform="translate(100, 50)">
+      <!-- 索引页 -->
+      <rect width="250" height="80" rx="6" ry="6" fill="#ffffff" stroke="#34c759" stroke-width="2"/>
+      <text x="125" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">索引页（INDEX）</text>
+      <text x="125" y="45" text-anchor="middle" font-size="14">FIL_PAGE_INDEX</text>
+      <text x="125" y="65" text-anchor="middle" font-size="12" fill="#666">存储B+树节点数据</text>
+    </g>
+    
+    <!-- Undo日志页 -->
+    <g transform="translate(400, 50)">
+      <rect width="250" height="80" rx="6" ry="6" fill="#ffffff" stroke="#34c759" stroke-width="2"/>
+      <text x="125" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">Undo日志页</text>
+      <text x="125" y="45" text-anchor="middle" font-size="14">FIL_PAGE_UNDO_LOG</text>
+      <text x="125" y="65" text-anchor="middle" font-size="12" fill="#666">存储Undo Log记录</text>
+    </g>
+    
+    <!-- 系统页 -->
+    <g transform="translate(700, 50)">
+      <rect width="250" height="80" rx="6" ry="6" fill="#ffffff" stroke="#34c759" stroke-width="2"/>
+      <text x="125" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">系统页</text>
+      <text x="125" y="45" text-anchor="middle" font-size="14">FIL_PAGE_TYPE_SYS</text>
+      <text x="125" y="65" text-anchor="middle" font-size="12" fill="#666">存储系统数据</text>
+    </g>
+    
+    <!-- 事务系统页 -->
+    <g transform="translate(1000, 50)">
+      <rect width="250" height="80" rx="6" ry="6" fill="#ffffff" stroke="#34c759" stroke-width="2"/>
+      <text x="125" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">事务系统页</text>
+      <text x="125" y="45" text-anchor="middle" font-size="14">FIL_PAGE_TYPE_TRX_SYS</text>
+      <text x="125" y="65" text-anchor="middle" font-size="12" fill="#666">事务相关信息</text>
+    </g>
+    
+    <!-- 其他重要类型 -->
+    <g transform="translate(100, 150)">
+      <rect width="250" height="80" rx="6" ry="6" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+      <text x="125" y="25" text-anchor="middle" font-size="16" font-weight="bold">File Space Header</text>
+      <text x="125" y="45" text-anchor="middle" font-size="12">表空间头信息</text>
+    </g>
+    
+    <g transform="translate(400, 150)">
+      <rect width="250" height="80" rx="6" ry="6" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+      <text x="125" y="25" text-anchor="middle" font-size="16" font-weight="bold">Insert Buffer Bitmap</text>
+      <text x="125" y="45" text-anchor="middle" font-size="12">插入缓冲位图</text>
+    </g>
+    
+    <g transform="translate(700, 150)">
+      <rect width="250" height="80" rx="6" ry="6" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+      <text x="125" y="25" text-anchor="middle" font-size="16" font-weight="bold">IBUF Bitmap</text>
+      <text x="125" y="45" text-anchor="middle" font-size="12">Change Buffer位图</text>
+    </g>
+    
+    <g transform="translate(1000, 150)">
+      <rect width="250" height="80" rx="6" ry="6" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+      <text x="125" y="25" text-anchor="middle" font-size="16" font-weight="bold">Allocated</text>
+      <text x="125" y="45" text-anchor="middle" font-size="12">新分配的页</text>
+    </g>
+  </g>
+  
+  <!-- 索引页详细结构 -->
+  <g transform="translate(300, 2710)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">索引页（INDEX Page）详细结构（16KB）</text>
+    
+    <!-- 页结构图 -->
+    <rect width="1400" height="300" rx="8" ry="8" fill="#ffffff" stroke="#34c759" stroke-width="3"/>
+    
+    <!-- 页头（38字节） -->
+    <rect width="1400" height="40" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="700" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">页头（File Header - 38字节）</text>
+    
+    <!-- 内容区域 -->
+    <g transform="translate(0, 40)">
+      <!-- Infimum + Supremum记录 -->
+      <rect width="1400" height="30" fill="#f0fff0"/>
+      <text x="700" y="20" text-anchor="middle" font-size="16" font-weight="bold">Infimum + Supremum记录（26字节）</text>
+    </g>
+    
+    <!-- 用户记录 -->
+    <g transform="translate(0, 70)">
+      <rect width="1400" height="120" fill="#ffffff"/>
+      <rect width="1400" height="30" fill="#f8f8f8"/>
+      <text x="700" y="20" text-anchor="middle" font-size="18" font-weight="bold">用户记录（User Records - 存储实际数据）</text>
+      
+      <!-- 示例记录 -->
+      <g transform="translate(100, 40)">
+        <!-- 记录1 -->
+        <rect width="300" height="30" rx="3" ry="3" fill="#e6ffe6" stroke="#34c759" stroke-width="1"/>
+        <text x="150" y="20" text-anchor="middle" font-size="14">记录1（Row 1）</text>
+        
+        <!-- 记录2 -->
+        <rect x="320" width="300" height="30" rx="3" ry="3" fill="#e6ffe6" stroke="#34c759" stroke-width="1"/>
+        <text x="470" y="20" text-anchor="middle" font-size="14">记录2（Row 2）</text>
+        
+        <!-- 记录3 -->
+        <rect x="640" width="300" height="30" rx="3" ry="3" fill="#e6ffe6" stroke="#34c759" stroke-width="1"/>
+        <text x="790" y="20" text-anchor="middle" font-size="14">记录3（Row 3）</text>
+        
+        <!-- 更多记录 -->
+        <g transform="translate(970, 0)">
+          <text x="0" y="20" text-anchor="start" font-size="14">更多记录...</text>
+        </g>
+      </g>
+    </g>
+    
+    <!-- 空闲空间 -->
+    <g transform="translate(0, 190)">
+      <rect width="1400" height="40" fill="#ffffcc"/>
+      <text x="700" y="25" text-anchor="middle" font-size="18" font-weight="bold">空闲空间（Free Space）</text>
+    </g>
+    
+    <!-- 页目录 -->
+    <g transform="translate(0, 230)">
+      <rect width="1400" height="40" fill="#ffebcc"/>
+      <text x="700" y="25" text-anchor="middle" font-size="18" font-weight="bold">页目录（Page Directory - 槽位数组）</text>
+    </g>
+    
+    <!-- 页尾 -->
+    <g transform="translate(0, 270)">
+      <rect width="1400" height="30" fill="#ffcccc"/>
+      <text x="700" y="20" text-anchor="middle" font-size="16" font-weight="bold">页尾（File Trailer - 8字节）</text>
+    </g>
+  </g>
+  
+  <!-- 页结构说明 -->
+  <g transform="translate(300, 3050)">
+    <rect width="1400" height="150" rx="8" ry="8" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="700" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e7a34">页结构关键特性</text>
+    
+    <g font-size="16" fill="#333">
+      <text x="100" y="65">• 页头：包含页号、前后页指针、页类型、校验和等信息</text>
+      <text x="100" y="90">• Infimum/Supremum：虚拟的最小和最大记录，用于边界处理</text>
+      <text x="100" y="115">• 用户记录：实际存储的行数据，按主键顺序排列</text>
+      <text x="100" y="140">• 页目录：槽位数组，每个槽指向一个记录组的起始位置，加速查找</text>
+      <text x="100" y="165">• 页尾：包含校验和，用于检测页是否完整写入磁盘</text>
+    </g>
+  </g>
+  
+  <!-- ========== 第六部分：三级存储模型总结 ========== -->
+  <rect x="100" y="3230" width="1800" height="150" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+  <text x="1000" y="3260" text-anchor="middle" font-size="24" font-weight="bold" fill="#2d4cd2">三级存储模型总结</text>
+  
+  <g font-size="16" fill="#333">
+    <text x="200" y="3295">• 段（Segment）：逻辑概念，管理数据段、索引段、回滚段</text>
+    <text x="200" y="3320">• 区（Extent）：物理分配单元，64个连续页（1MB），减少磁盘碎片</text>
+    <text x="200" y="3345">• 页（Page）：最小I/O单元，16KB固定大小，内存缓存基本单位</text>
+    <text x="200" y="3370">• 层级管理：段管理区，区管理页，形成高效的空间管理架构</text>
+  </g>
+</svg>

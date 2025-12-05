@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InnoDB 存储引擎架构图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border-radius: 3px;
+        }
+        
+        .flowchart-container {
+            width: 100%;
+            height: 800px;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+            padding: 10px;
+        }
+        
+        svg {
+            display: block;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+        
+        .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            fill: #2c3e50;
+            text-anchor: middle;
+        }
+        
+        .component-rect {
+            stroke-width: 2;
+            stroke: #2c3e50;
+            rx: 6;
+            ry: 6;
+        }
+        
+        .arrow {
+            stroke-width: 2;
+            marker-end: url(#arrowhead);
+        }
+        
+        .arrow-label {
+            font-size: 13px;
+            fill: #444;
+        }
+        
+        .note-box {
+            fill: #fff9e6;
+            stroke: #f1c40f;
+            stroke-width: 1.5;
+            rx: 6;
+            ry: 6;
+        }
+        
+        .note-text {
+            font-size: 12px;
+            fill: #7d6608;
+        }
+        
+        .section-box {
+            stroke-width: 3;
+            rx: 10;
+            ry: 10;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 15px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .description {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .description h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        .description ul {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .description li {
+            margin-bottom: 8px;
+        }
+        
+        .highlight {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        .section-container {
+            margin-bottom: 25px;
+        }
+        
+        .component-label {
+            font-size: 14px;
+            font-weight: bold;
+            text-anchor: middle;
+        }
+        
+        .component-desc {
+            font-size: 12px;
+            text-anchor: middle;
+        }
+        
+        .memory-bg {
+            fill: #e8f4f8;
+        }
+        
+        .disk-bg {
+            fill: #ffe6cc;
+        }
+        
+        .thread-bg {
+            fill: #d5e8d4;
+        }
+        
+        .interface-bg {
+            fill: #e1d5e7;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .legend {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            button {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>InnoDB 存储引擎架构图</h1>
+        <p class="subtitle">MySQL InnoDB 存储引擎内部结构与核心组件</p>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e8f4f8;"></div>
+                <span>内存结构</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ffe6cc;"></div>
+                <span>磁盘结构</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #d5e8d4;"></div>
+                <span>后台线程</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e1d5e7;"></div>
+                <span>接口层</span>
+            </div>
+        </div>
+        
+        <div class="flowchart-container">
+            <svg id="flowchart" width="2400" height="2000" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#2c3e50"/>
+                    </marker>
+                    <linearGradient id="memory-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#e8f4f8;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#c9e7f5;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="disk-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#ffe6cc;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#ffcc99;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="thread-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#d5e8d4;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#b1d4b0;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="interface-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#e1d5e7;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#d0bcdd;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                
+                <!-- 主标题 -->
+                <text x="1200" y="50" class="section-title">InnoDB 存储引擎架构</text>
+                
+                <!-- MySQL Server 层 -->
+                <rect x="400" y="80" width="1600" height="100" class="section-box" fill="#f8f9fa" stroke="#adb5bd"/>
+                <text x="1200" y="115" class="section-title">MySQL Server 层</text>
+                
+                <!-- MySQL Server 组件 -->
+                <rect x="450" y="150" width="300" height="80" class="component-rect" fill="#f8f9fa"/>
+                <text x="600" y="180" class="component-label">SQL 接口</text>
+                <text x="600" y="205" class="component-desc">SQL Interface</text>
+                
+                <rect x="800" y="150" width="300" height="80" class="component-rect" fill="#f8f9fa"/>
+                <text x="950" y="180" class="component-label">优化器</text>
+                <text x="950" y="205" class="component-desc">Optimizer</text>
+                
+                <rect x="1150" y="150" width="300" height="80" class="component-rect" fill="#f8f9fa"/>
+                <text x="1300" y="180" class="component-label">执行器</text>
+                <text x="1300" y="205" class="component-desc">Executor</text>
+                
+                <rect x="1500" y="150" width="300" height="80" class="component-rect" fill="#f8f9fa"/>
+                <text x="1650" y="180" class="component-label">查询缓存</text>
+                <text x="1650" y="205" class="component-desc">Query Cache (8.0移除)</text>
+                
+                <!-- 连接到InnoDB接口 -->
+                <path d="M 1200 230 L 1200 280" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1220" y="260" class="arrow-label">调用存储引擎API</text>
+                
+                <!-- InnoDB接口层 -->
+                <rect x="100" y="300" width="2200" height="150" class="section-box" fill="url(#interface-gradient)" stroke="#2c3e50"/>
+                <text x="1200" y="335" class="section-title">InnoDB 接口层</text>
+                
+                <!-- Handler API -->
+                <rect x="200" y="380" width="2000" height="50" class="component-rect" fill="#e1d5e7"/>
+                <text x="1200" y="410" class="component-label">存储引擎 Handler API</text>
+                
+                <!-- 接口组件 -->
+                <rect x="200" y="450" width="400" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="400" y="480" class="component-label">事务接口</text>
+                <text x="400" y="505" class="component-desc">开始/提交/回滚</text>
+                
+                <rect x="650" y="450" width="400" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="850" y="480" class="component-label">索引接口</text>
+                <text x="850" y="505" class="component-desc">B+树索引操作</text>
+                
+                <rect x="1100" y="450" width="400" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="1300" y="480" class="component-label">记录接口</text>
+                <text x="1300" y="505" class="component-desc">行记录读写</text>
+                
+                <rect x="1550" y="450" width="400" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="1750" y="480" class="component-label">表操作接口</text>
+                <text x="1750" y="505" class="component-desc">创建/修改/删除表</text>
+                
+                <!-- 接口到内存结构 -->
+                <path d="M 1200 530 L 1200 580" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1220" y="560" class="arrow-label">数据操作请求</text>
+                
+                <!-- 内存结构层 -->
+                <rect x="100" y="600" width="2200" height="500" class="section-box" fill="url(#memory-gradient)" stroke="#2c3e50"/>
+                <text x="1200" y="635" class="section-title">内存结构 (In-Memory Structures)</text>
+                
+                <!-- 缓冲池 -->
+                <rect x="200" y="680" width="600" height="180" class="component-rect" fill="#e8f4f8"/>
+                <text x="500" y="710" class="component-label">缓冲池 (Buffer Pool)</text>
+                <text x="500" y="735" class="component-desc">缓存数据和索引页</text>
+                
+                <!-- 缓冲池子组件 -->
+                <rect x="250" y="760" width="500" height="40" class="component-rect" fill="#d1ecf1"/>
+                <text x="500" y="785" class="component-desc">数据页 (Data Pages)</text>
+                
+                <rect x="250" y="810" width="500" height="40" class="component-rect" fill="#d1ecf1"/>
+                <text x="500" y="835" class="component-desc">索引页 (Index Pages)</text>
+                
+                <!-- 缓冲池管理 -->
+                <rect x="900" y="680" width="600" height="180" class="component-rect" fill="#e8f4f8"/>
+                <text x="1200" y="710" class="component-label">缓冲池管理</text>
+                <text x="1200" y="735" class="component-desc">LRU列表/Free列表/Flush列表</text>
+                
+                <!-- 缓冲池管理子组件 -->
+                <rect x="950" y="760" width="500" height="40" class="component-rect" fill="#d1ecf1"/>
+                <text x="1200" y="785" class="component-desc">LRU列表 (最近最少使用)</text>
+                
+                <rect x="950" y="810" width="500" height="40" class="component-rect" fill="#d1ecf1"/>
+                <text x="1200" y="835" class="component-desc">Free列表 (空闲页)</text>
+                
+                <rect x="950" y="860" width="500" height="40" class="component-rect" fill="#d1ecf1"/>
+                <text x="1200" y="885" class="component-desc">Flush列表 (脏页)</text>
+                
+                <!-- 其他内存组件 -->
+                <rect x="1600" y="680" width="600" height="120" class="component-rect" fill="#e8f4f8"/>
+                <text x="1900" y="710" class="component-label">更改缓冲区 (Change Buffer)</text>
+                <text x="1900" y="735" class="component-desc">缓存非唯一索引变更</text>
+                
+                <!-- 第二行内存组件 -->
+                <rect x="200" y="880" width="400" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="400" y="910" class="component-label">自适应哈希索引</text>
+                <text x="400" y="935" class="component-desc">Adaptive Hash Index</text>
+                
+                <rect x="650" y="880" width="400" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="850" y="910" class="component-label">锁信息</text>
+                <text x="850" y="935" class="component-desc">Lock System</text>
+                
+                <rect x="1100" y="880" width="400" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="1300" y="910" class="component-label">日志缓冲区</text>
+                <text x="1300" y="935" class="component-desc">Log Buffer (Redo Log)</text>
+                
+                <rect x="1550" y="880" width="400" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="1750" y="910" class="component-label">额外内存池</text>
+                <text x="1750" y="935" class="component-desc">Additional Memory Pool</text>
+                
+                <!-- 第三行内存组件 -->
+                <rect x="200" y="980" width="850" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="625" y="1010" class="component-label">数据字典缓存 (Data Dictionary Cache)</text>
+                <text x="625" y="1035" class="component-desc">表结构/外键/视图等元数据</text>
+                
+                <rect x="1100" y="980" width="850" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="1525" y="1010" class="component-label">事务系统 (Transaction System)</text>
+                <text x="1525" y="1035" class="component-desc">事务ID/Undo Log/Read View</text>
+                
+                <!-- 内存到磁盘 -->
+                <path d="M 1200 1060 L 1200 1110" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1220" y="1090" class="arrow-label">刷脏页/日志刷新</text>
+                
+                <!-- 磁盘结构层 -->
+                <rect x="100" y="1120" width="2200" height="500" class="section-box" fill="url(#disk-gradient)" stroke="#2c3e50"/>
+                <text x="1200" y="1155" class="section-title">磁盘结构 (On-Disk Structures)</text>
+                
+                <!-- 表空间 -->
+                <rect x="200" y="1200" width="600" height="180" class="component-rect" fill="#ffe6cc"/>
+                <text x="500" y="1230" class="component-label">表空间 (Tablespaces)</text>
+                
+                <!-- 表空间子组件 -->
+                <rect x="250" y="1250" width="500" height="40" class="component-rect" fill="#fdebd0"/>
+                <text x="500" y="1275" class="component-desc">系统表空间 (ibdata1)</text>
+                
+                <rect x="250" y="1300" width="500" height="40" class="component-rect" fill="#fdebd0"/>
+                <text x="500" y="1325" class="component-desc">独立表空间 (.ibd 文件)</text>
+                
+                <rect x="250" y="1350" width="500" height="40" class="component-rect" fill="#fdebd0"/>
+                <text x="500" y="1375" class="component-desc">通用表空间</text>
+                
+                <rect x="250" y="1400" width="500" height="40" class="component-rect" fill="#fdebd0"/>
+                <text x="500" y="1425" class="component-desc">临时表空间 (ibtmp1)</text>
+                
+                <!-- 重做日志 -->
+                <rect x="900" y="1200" width="600" height="120" class="component-rect" fill="#ffe6cc"/>
+                <text x="1200" y="1230" class="component-label">重做日志 (Redo Log)</text>
+                <text x="1200" y="1255" class="component-desc">保证事务持久性</text>
+                
+                <!-- 重做日志子组件 -->
+                <rect x="950" y="1280" width="500" height="40" class="component-rect" fill="#fdebd0"/>
+                <text x="1200" y="1305" class="component-desc">ib_logfile0, ib_logfile1</text>
+                
+                <!-- 撤销日志 -->
+                <rect x="1600" y="1200" width="600" height="120" class="component-rect" fill="#ffe6cc"/>
+                <text x="1900" y="1230" class="component-label">撤销日志 (Undo Log)</text>
+                <text x="1900" y="1255" class="component-desc">事务回滚和MVCC</text>
+                
+                <!-- 第二行磁盘组件 -->
+                <rect x="200" y="1400" width="400" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="400" y="1430" class="component-label">数据文件</text>
+                <text x="400" y="1455" class="component-desc">.ibd/.frm</text>
+                
+                <rect x="650" y="1400" width="400" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="850" y="1430" class="component-label">索引文件</text>
+                <text x="850" y="1455" class="component-desc">B+树索引结构</text>
+                
+                <rect x="1100" y="1400" width="400" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="1300" y="1430" class="component-label">双写缓冲区文件</text>
+                <text x="1300" y="1455" class="component-desc">Doublewrite Buffer</text>
+                
+                <rect x="1550" y="1400" width="400" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="1750" y="1430" class="component-label">二进制日志</text>
+                <text x="1750" y="1455" class="component-desc">Binary Log (Server层)</text>
+                
+                <!-- 第三行磁盘组件 -->
+                <rect x="200" y="1500" width="850" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="625" y="1530" class="component-label">InnoDB 数据字典</text>
+                <text x="625" y="1555" class="component-desc">系统表 (SYS_TABLES/SYS_COLUMNS等)</text>
+                
+                <rect x="1100" y="1500" width="850" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="1525" y="1530" class="component-label">检查点信息</text>
+                <text x="1525" y="1555" class="component-desc">Checkpoint LSN</text>
+                
+                <!-- 后台线程层 -->
+                <rect x="100" y="1640" width="2200" height="300" class="section-box" fill="url(#thread-gradient)" stroke="#2c3e50"/>
+                <text x="1200" y="1675" class="section-title">后台线程 (Background Threads)</text>
+                
+                <!-- 后台线程组件 -->
+                <rect x="200" y="1720" width="400" height="80" class="component-rect" fill="#d5e8d4"/>
+                <text x="400" y="1750" class="component-label">主线程 (Master Thread)</text>
+                <text x="400" y="1775" class="component-desc">核心调度线程</text>
+                
+                <rect x="650" y="1720" width="400" height="80" class="component-rect" fill="#d5e8d4"/>
+                <text x="850" y="1750" class="component-label">IO线程 (IO Threads)</text>
+                <text x="850" y="1775" class="component-desc">读写线程，包括insert/read/write/log线程</text>
+                
+                <rect x="1100" y="1720" width="400" height="80" class="component-rect" fill="#d5e8d4"/>
+                <text x="1300" y="1750" class="component-label">清理线程 (Purge Thread)</text>
+                <text x="1300" y="1775" class="component-desc">回收Undo Log</text>
+                
+                <rect x="1550" y="1720" width="400" height="80" class="component-rect" fill="#d5e8d4"/>
+                <text x="1750" y="1750" class="component-label">页清理线程 (Page Cleaner Thread)</text>
+                <text x="1750" y="1775" class="component-desc">刷脏页到磁盘</text>
+                
+                <!-- 第二行后台线程 -->
+                <rect x="200" y="1820" width="400" height="80" class="component-rect" fill="#d5e8d4"/>
+                <text x="400" y="1850" class="component-label">监控线程</text>
+                <text x="400" y="1875" class="component-desc">监控死锁/超时</text>
+                
+                <rect x="650" y="1820" width="400" height="80" class="component-rect" fill="#d5e8d4"/>
+                <text x="850" y="1850" class="component-label">错误监控线程</text>
+                <text x="850" y="1875" class="component-desc">错误日志记录</text>
+                
+                <rect x="1100" y="1820" width="400" height="80" class="component-rect" fill="#d5e8d4"/>
+                <text x="1300" y="1850" class="component-label">锁监控线程</text>
+                <text x="1300" y="1875" class="component-desc">锁信息监控</text>
+                
+                <!-- 关键流程箭头 -->
+                <!-- 读写流程 -->
+                <path d="M 1200 1350 Q 1200 1400 1000 1400 Q 800 1400 800 1350" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="1000" y="1420" class="arrow-label">读取数据页</text>
+                
+                <path d="M 1200 1350 Q 1200 1400 1400 1400 Q 1600 1400 1600 1350" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="1400" y="1420" class="arrow-label">写入数据页</text>
+                
+                <!-- 日志流程 -->
+                <path d="M 1300 1035 Q 1300 1080 1300 1110 Q 1300 1150 1200 1150 Q 1100 1150 1100 1200" class="arrow" fill="none" stroke="#e74c3c" stroke-width="2"/>
+                <text x="1200" y="1130" class="arrow-label" fill="#e74c3c">Redo Log 写入</text>
+                
+                <path d="M 1525 1035 Q 1525 1080 1525 1110 Q 1525 1150 1750 1150 Q 1900 1150 1900 1200" class="arrow" fill="none" stroke="#9b59b6" stroke-width="2"/>
+                <text x="1700" y="1130" class="arrow-label" fill="#9b59b6">Undo Log 写入</text>
+                
+                <!-- 后台线程操作 -->
+                <path d="M 400 1800 Q 400 1600 500 1600 Q 625 1600 625 1500" class="arrow" fill="none" stroke="#27ae60" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="450" y="1700" class="arrow-label" fill="#27ae60">主线程调度</text>
+                
+                <path d="M 1300 1800 Q 1300 1600 1400 1600 Q 1525 1600 1525 1500" class="arrow" fill="none" stroke="#27ae60" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="1400" y="1700" class="arrow-label" fill="#27ae60">Purge线程清理</text>
+                
+                <!-- 说明框 -->
+                <rect x="50" y="680" width="300" height="200" class="note-box"/>
+                <text x="200" y="705" text-anchor="middle" font-weight="bold" class="note-text">缓冲池关键特性</text>
+                <text x="200" y="730" text-anchor="middle" font-size="12" class="note-text">• 默认大小128MB</text>
+                <text x="200" y="755" text-anchor="middle" font-size="12" class="note-text">• 支持多缓冲池实例</text>
+                <text x="200" y="780" text-anchor="middle" font-size="12" class="note-text">• 预读机制</text>
+                <text x="200" y="805" text-anchor="middle" font-size="12" class="note-text">• 延迟写机制</text>
+                <text x="200" y="830" text-anchor="middle" font-size="12" class="note-text">• Checkpoint机制</text>
+                
+                <rect x="50" y="1200" width="300" height="200" class="note-box"/>
+                <text x="200" y="1225" text-anchor="middle" font-weight="bold" class="note-text">表空间特性</text>
+                <text x="200" y="1250" text-anchor="middle" font-size="12" class="note-text">• 系统表空间包含：</text>
+                <text x="200" y="1275" text-anchor="middle" font-size="12" class="note-text">  - 数据字典</text>
+                <text x="200" y="1300" text-anchor="middle" font-size="12" class="note-text">  - 双写缓冲区</text>
+                <text x="200" y="1325" text-anchor="middle" font-size="12" class="note-text">  - 撤销日志段</text>
+                <text x="200" y="1350" text-anchor="middle" font-size="12" class="note-text">  - 变更缓冲区</text>
+                <text x="200" y="1375" text-anchor="middle" font-size="12" class="note-text">• 独立表空间：每表一个.ibd</text>
+                
+                <rect x="2050" y="680" width="300" height="200" class="note-box"/>
+                <text x="2200" y="705" text-anchor="middle" font-weight="bold" class="note-text">关键特性</text>
+                <text x="2200" y="730" text-anchor="middle" font-size="12" class="note-text">• 事务支持 (ACID)</text>
+                <text x="2200" y="755" text-anchor="middle" font-size="12" class="note-text">• 行级锁</text>
+                <text x="2200" y="780" text-anchor="middle" font-size="12" class="note-text">• 外键约束</text>
+                <text x="2200" y="805" text-anchor="middle" font-size="12" class="note-text">• MVCC多版本控制</text>
+                <text x="2200" y="830" text-anchor="middle" font-size="12" class="note-text">• 聚簇索引组织表</text>
+                <text x="2200" y="855" text-anchor="middle" font-size="12" class="note-text">• 自适应哈希索引</text>
+                
+                <rect x="2050" y="1200" width="300" height="200" class="note-box"/>
+                <text x="2200" y="1225" text-anchor="middle" font-weight="bold" class="note-text">日志系统</text>
+                <text x="2200" y="1250" text-anchor="middle" font-size="12" class="note-text">• Redo Log: WAL技术</text>
+                <text x="2200" y="1275" text-anchor="middle" font-size="12" class="note-text">• Undo Log: 事务回滚</text>
+                <text x="2200" y="1300" text-anchor="middle" font-size="12" class="note-text">• Binlog: 复制和恢复</text>
+                <text x="2200" y="1325" text-anchor="middle" font-size="12" class="note-text">• 重做日志循环写入</text>
+                <text x="2200" y="1350" text-anchor="middle" font-size="12" class="note-text">• 检查点机制</text>
+                <text x="2200" y="1375" text-anchor="middle" font-size="12" class="note-text">• 双写缓冲区防断裂</text>
+            </svg>
+        </div>
+        
+        <div class="controls">
+            <button id="zoomIn">放大</button>
+            <button id="zoomOut">缩小</button>
+            <button id="resetView">重置视图</button>
+            <button id="downloadSVG">下载SVG</button>
+        </div>
+        
+        <div class="description">
+            <h3>InnoDB 存储引擎架构详细说明</h3>
+            
+            <div class="section-container">
+                <h4>1. 接口层 (Interface Layer)</h4>
+                <ul>
+                    <li><span class="highlight">Handler API</span>：MySQL Server层与存储引擎的通信接口，提供统一的存储引擎访问方式。</li>
+                    <li><span class="highlight">事务接口</span>：提供事务开始、提交、回滚等操作接口。</li>
+                    <li><span class="highlight">索引接口</span>：B+树索引的创建、查询、更新、删除操作。</li>
+                    <li><span class="highlight">记录接口</span>：行记录的读取、插入、更新、删除操作。</li>
+                    <li><span class="highlight">表操作接口</span>：表的创建、修改、删除等DDL操作接口。</li>
+                </ul>
+            </div>
+            
+            <div class="section-container">
+                <h4>2. 内存结构 (Memory Structures)</h4>
+                <ul>
+                    <li><span class="highlight">缓冲池 (Buffer Pool)</span>：InnoDB最重要的内存区域，缓存数据和索引页，减少磁盘I/O。
+                        <ul>
+                            <li><strong>数据页</strong>：表数据页的缓存</li>
+                            <li><strong>索引页</strong>：索引数据页的缓存</li>
+                            <li><strong>自适应哈希索引</strong>：自动为热点数据创建哈希索引，加速查询</li>
+                            <li><strong>LRU列表</strong>：管理缓冲池页的最近最少使用算法</li>
+                            <li><strong>Free列表</strong>：管理空闲缓冲池页</li>
+                            <li><strong>Flush列表</strong>：管理需要刷新到磁盘的脏页</li>
+                        </ul>
+                    </li>
+                    <li><span class="highlight">更改缓冲区 (Change Buffer)</span>：缓存非唯一二级索引的变更，减少随机I/O。</li>
+                    <li><span class="highlight">日志缓冲区 (Log Buffer)</span>：缓存重做日志(Redo Log)，定期刷新到磁盘。</li>
+                    <li><span class="highlight">锁信息 (Lock System)</span>：管理行级锁信息，支持并发控制。</li>
+                    <li><span class="highlight">数据字典缓存</span>：缓存表结构、外键、视图等元数据信息。</li>
+                    <li><span class="highlight">事务系统</span>：管理事务ID、Undo Log、Read View等事务相关信息。</li>
+                    <li><span class="highlight">额外内存池</span>：分配额外内存用于内部数据结构。</li>
+                </ul>
+            </div>
+            
+            <div class="section-container">
+                <h4>3. 磁盘结构 (On-Disk Structures)</h4>
+                <ul>
+                    <li><span class="highlight">表空间 (Tablespaces)</span>：
+                        <ul>
+                            <li><strong>系统表空间 (ibdata1)</strong>：存储数据字典、双写缓冲区、撤销日志、变更缓冲区等</li>
+                            <li><strong>独立表空间 (.ibd文件)</strong>：每张表单独的表空间文件，存储表数据和索引</li>
+                            <li><strong>通用表空间</strong>：多个表共享的表空间</li>
+                            <li><strong>临时表空间 (ibtmp1)</strong>：存储临时表数据</li>
+                        </ul>
+                    </li>
+                    <li><span class="highlight">重做日志 (Redo Log)</span>：保证事务的持久性，采用WAL(Write-Ahead Logging)技术。
+                        <ul>
+                            <li>ib_logfile0, ib_logfile1：重做日志文件</li>
+                            <li>循环写入，写满后覆盖</li>
+                            <li>Checkpoint机制：标记已经刷新到数据文件的位置</li>
+                        </ul>
+                    </li>
+                    <li><span class="highlight">撤销日志 (Undo Log)</span>：保证事务的原子性和MVCC多版本并发控制。
+                        <ul>
+                            <li>存储在系统表空间或独立的Undo表空间</li>
+                            <li>记录事务修改前的数据镜像</li>
+                            <li>用于事务回滚和MVCC历史版本访问</li>
+                        </ul>
+                    </li>
+                    <li><span class="highlight">数据文件和索引文件</span>：.ibd文件存储表数据和B+树索引，.frm文件存储表结构。</li>
+                    <li><span class="highlight">双写缓冲区 (Doublewrite Buffer)</span>：防止页断裂(Page Corruption)，保证数据页写入的原子性。</li>
+                    <li><span class="highlight">二进制日志 (Binary Log)</span>：MySQL Server层的日志，用于复制和恢复。</li>
+                    <li><span class="highlight">InnoDB数据字典</span>：存储元数据的系统表，如SYS_TABLES、SYS_COLUMNS等。</li>
+                </ul>
+            </div>
+            
+            <div class="section-container">
+                <h4>4. 后台线程 (Background Threads)</h4>
+                <ul>
+                    <li><span class="highlight">主线程 (Master Thread)</span>：核心调度线程，负责缓冲池刷新、Undo页回收等。</li>
+                    <li><span class="highlight">IO线程 (IO Threads)</span>：
+                        <ul>
+                            <li>read thread：负责读取操作</li>
+                            <li>write thread：负责写入操作</li>
+                            <li>log thread：负责日志写入</li>
+                            <li>insert buffer thread：负责变更缓冲区操作</li>
+                        </ul>
+                    </li>
+                    <li><span class="highlight">清理线程 (Purge Thread)</span>：回收已经提交事务的Undo Log。</li>
+                    <li><span class="highlight">页清理线程 (Page Cleaner Thread)</span>：将缓冲池中的脏页刷新到磁盘。</li>
+                    <li><span class="highlight">监控线程</span>：监控死锁、锁等待超时等。</li>
+                    <li><span class="highlight">错误监控线程</span>：处理错误和记录错误日志。</li>
+                    <li><span class="highlight">锁监控线程</span>：监控锁信息。</li>
+                </ul>
+            </div>
+            
+            <div class="section-container">
+                <h4>5. 关键工作机制</h4>
+                <ul>
+                    <li><span class="highlight">WAL (Write-Ahead Logging)</span>：先写日志，后写数据，保证事务持久性。</li>
+                    <li><span class="highlight">MVCC (Multi-Version Concurrency Control)</span>：多版本并发控制，实现非锁定读。</li>
+                    <li><span class="highlight">Checkpoint机制</span>：定期将缓冲池中的脏页刷新到磁盘，并推进重做日志的检查点。</li>
+                    <li><span class="highlight">双写机制</span>：防止页断裂，保证数据页写入的完整性。</li>
+                    <li><span class="highlight">自适应哈希索引</span>：自动为热点数据创建哈希索引，提升查询性能。</li>
+                    <li><span class="highlight">Change Buffer优化</span>：减少非唯一二级索引的随机I/O。</li>
+                </ul>
+            </div>
+            
+            <div class="section-container">
+                <h4>6. 事务处理流程示例</h4>
+                <ol>
+                    <li>客户端发送更新请求到MySQL Server</li>
+                    <li>Server层通过Handler API调用InnoDB接口</li>
+                    <li>InnoDB在缓冲池中查找数据页，如果不在则从磁盘加载</li>
+                    <li>生成Undo Log记录修改前的数据</li>
+                    <li>修改缓冲池中的数据页，标记为脏页</li>
+                    <li>将Redo Log写入日志缓冲区</li>
+                    <li>事务提交时，将Redo Log刷新到磁盘</li>
+                    <li>后台线程定期将脏页刷新到磁盘</li>
+                    <li>Purge线程回收不再需要的Undo Log</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const svg = document.getElementById('flowchart');
+            let scale = 1;
+            const scaleStep = 0.1;
+            const container = document.querySelector('.flowchart-container');
+            
+            // 缩放功能
+            document.getElementById('zoomIn').addEventListener('click', function() {
+                scale += scaleStep;
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transformOrigin = 'top left';
+            });
+            
+            document.getElementById('zoomOut').addEventListener('click', function() {
+                if (scale > scaleStep) {
+                    scale -= scaleStep;
+                    svg.style.transform = `scale(${scale})`;
+                    svg.style.transformOrigin = 'top left';
+                }
+            });
+            
+            document.getElementById('resetView').addEventListener('click', function() {
+                scale = 1;
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transformOrigin = 'top left';
+                container.scrollTop = 0;
+                container.scrollLeft = (svg.clientWidth - container.clientWidth) / 2;
+            });
+            
+            // 下载SVG功能
+            document.getElementById('downloadSVG').addEventListener('click', function() {
+                const serializer = new XMLSerializer();
+                const source = serializer.serializeToString(svg);
+                
+                // 添加命名空间
+                if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+                    source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+                }
+                if (!source.match(/^<svg[^>]+"http\:\/\/www\.w3\.org\/1999\/xlink"/)) {
+                    source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+                }
+                
+                const svgBlob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+                const url = URL.createObjectURL(svgBlob);
+                
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = 'innodb-storage-engine-architecture.svg';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+            });
+            
+            // 添加SVG交互效果
+            const componentRects = document.querySelectorAll('.component-rect');
+            componentRects.forEach(rect => {
+                rect.addEventListener('mouseenter', function() {
+                    this.style.filter = 'brightness(0.95)';
+                    this.style.strokeWidth = '3';
+                    this.style.cursor = 'pointer';
+                });
+                
+                rect.addEventListener('mouseleave', function() {
+                    this.style.filter = 'brightness(1)';
+                    this.style.strokeWidth = '2';
+                });
+                
+                // 添加点击显示详细信息功能
+                rect.addEventListener('click', function() {
+                    const textElements = this.parentNode.querySelectorAll('text');
+                    let title = '';
+                    textElements.forEach(text => {
+                        if (text.classList.contains('component-label')) {
+                            title = text.textContent;
+                        }
+                    });
+                    if (title) {
+                        alert(`组件: ${title}\n\n点击查看该组件的详细信息。`);
+                    }
+                });
+            });
+            
+            // 自动滚动到中心
+            setTimeout(() => {
+                container.scrollLeft = (svg.clientWidth - container.clientWidth) / 2;
+                container.scrollTop = (svg.clientHeight - container.clientHeight) / 3;
+            }, 100);
+            
+            // 添加键盘快捷键
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey) {
+                    if (e.key === '+') {
+                        e.preventDefault();
+                        document.getElementById('zoomIn').click();
+                    } else if (e.key === '-') {
+                        e.preventDefault();
+                        document.getElementById('zoomOut').click();
+                    } else if (e.key === '0') {
+                        e.preventDefault();
+                        document.getElementById('resetView').click();
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

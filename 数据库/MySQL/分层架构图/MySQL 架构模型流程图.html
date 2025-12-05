@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL 架构模型流程图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border-radius: 3px;
+        }
+        
+        .flowchart-container {
+            width: 100%;
+            height: 750px;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+            padding: 10px;
+        }
+        
+        svg {
+            display: block;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+        
+        .layer-title {
+            font-size: 20px;
+            font-weight: bold;
+            fill: #2c3e50;
+            text-anchor: middle;
+        }
+        
+        .component-rect {
+            stroke-width: 2;
+            stroke: #2c3e50;
+            rx: 6;
+            ry: 6;
+        }
+        
+        .arrow {
+            stroke-width: 2;
+            marker-end: url(#arrowhead);
+        }
+        
+        .arrow-label {
+            font-size: 13px;
+            fill: #444;
+        }
+        
+        .note-box {
+            fill: #fff9e6;
+            stroke: #f1c40f;
+            stroke-width: 1.5;
+            rx: 6;
+            ry: 6;
+        }
+        
+        .note-text {
+            font-size: 12px;
+            fill: #7d6608;
+        }
+        
+        .layer-box {
+            stroke-width: 3;
+            rx: 10;
+            ry: 10;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 15px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .description {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .description h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        .description ul {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .description li {
+            margin-bottom: 8px;
+        }
+        
+        .highlight {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        .layer-container {
+            margin-bottom: 25px;
+        }
+        
+        .component-label {
+            font-size: 14px;
+            font-weight: bold;
+            text-anchor: middle;
+        }
+        
+        .component-desc {
+            font-size: 12px;
+            text-anchor: middle;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .legend {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            button {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MySQL 架构模型流程图</h1>
+        <p class="subtitle">MySQL 整体架构与核心组件交互关系</p>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e8f4f8;"></div>
+                <span>连接层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #d5e8d4;"></div>
+                <span>服务层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ffe6cc;"></div>
+                <span>存储引擎层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e1d5e7;"></div>
+                <span>文件系统层</span>
+            </div>
+        </div>
+        
+        <div class="flowchart-container">
+            <svg id="flowchart" width="2200" height="2000" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#2c3e50"/>
+                    </marker>
+                    <linearGradient id="layer1-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#e8f4f8;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#c9e7f5;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="layer2-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#d5e8d4;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#b1d4b0;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="layer3-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#ffe6cc;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#ffcc99;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="layer4-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#e1d5e7;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#d0bcdd;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="client-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#f8f9fa;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#e9ecef;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                
+                <!-- 主标题 -->
+                <text x="1100" y="50" class="layer-title">MySQL 整体架构模型</text>
+                
+                <!-- 客户端层 -->
+                <rect x="400" y="80" width="1400" height="120" fill="url(#client-gradient)" class="layer-box" stroke="#adb5bd"/>
+                <text x="1100" y="115" class="layer-title">客户端层 (Client Layer)</text>
+                
+                <!-- 客户端组件 -->
+                <rect x="500" y="150" width="250" height="80" class="component-rect" fill="#f8f9fa"/>
+                <text x="625" y="185" class="component-label">JDBC/ODBC</text>
+                <text x="625" y="205" class="component-desc">Java/.NET 应用程序</text>
+                
+                <rect x="800" y="150" width="250" height="80" class="component-rect" fill="#f8f9fa"/>
+                <text x="925" y="185" class="component-label">MySQL Client</text>
+                <text x="925" y="205" class="component-desc">命令行工具</text>
+                
+                <rect x="1100" y="150" width="250" height="80" class="component-rect" fill="#f8f9fa"/>
+                <text x="1225" y="185" class="component-label">PHP/Python</text>
+                <text x="1225" y="205" class="component-desc">Web 应用连接</text>
+                
+                <rect x="1400" y="150" width="250" height="80" class="component-rect" fill="#f8f9fa"/>
+                <text x="1525" y="185" class="component-label">其他客户端</text>
+                <text x="1525" y="205" class="component-desc">C/C++/Go 等</text>
+                
+                <!-- 连接到连接层 -->
+                <path d="M 625 230 L 625 280" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <path d="M 925 230 L 925 280" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <path d="M 1225 230 L 1225 280" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <path d="M 1525 230 L 1525 280" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1100" y="260" class="arrow-label">建立连接，发送SQL请求</text>
+                
+                <!-- 连接层 -->
+                <rect x="100" y="300" width="2000" height="200" fill="url(#layer1-gradient)" class="layer-box" stroke="#2c3e50"/>
+                <text x="1100" y="335" class="layer-title">连接层 (Connection Layer)</text>
+                
+                <!-- 连接层组件 -->
+                <rect x="200" y="380" width="300" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="350" y="410" class="component-label">连接器</text>
+                <text x="350" y="430" class="component-desc">Connector</text>
+                
+                <rect x="550" y="380" width="300" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="700" y="410" class="component-label">连接池</text>
+                <text x="700" y="430" class="component-desc">Connection Pool</text>
+                
+                <rect x="900" y="380" width="300" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="1050" y="410" class="component-label">身份验证</text>
+                <text x="1050" y="430" class="component-desc">Authentication</text>
+                
+                <rect x="1250" y="380" width="300" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="1400" y="410" class="component-label">线程管理</text>
+                <text x="1400" y="430" class="component-desc">Thread Management</text>
+                
+                <rect x="1600" y="380" width="300" height="80" class="component-rect" fill="#e8f4f8"/>
+                <text x="1750" y="410" class="component-label">连接限制</text>
+                <text x="1750" y="430" class="component-desc">max_connections</text>
+                
+                <!-- 连接层到服务层 -->
+                <path d="M 1100 480 L 1100 530" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1120" y="510" class="arrow-label">验证通过，转发SQL</text>
+                
+                <!-- 服务层 -->
+                <rect x="100" y="550" width="2000" height="450" fill="url(#layer2-gradient)" class="layer-box" stroke="#2c3e50"/>
+                <text x="1100" y="585" class="layer-title">服务层 (Server Layer)</text>
+                
+                <!-- 服务层第一行组件 -->
+                <rect x="200" y="630" width="350" height="100" class="component-rect" fill="#d5e8d4"/>
+                <text x="375" y="665" class="component-label">SQL 接口</text>
+                <text x="375" y="690" class="component-desc">SQL Interface</text>
+                <text x="375" y="715" class="component-desc">DML/DDL/DCL/TCL</text>
+                
+                <rect x="600" y="630" width="350" height="100" class="component-rect" fill="#d5e8d4"/>
+                <text x="775" y="665" class="component-label">查询缓存</text>
+                <text x="775" y="690" class="component-desc">Query Cache</text>
+                <text x="775" y="715" class="component-desc">(MySQL 8.0 已移除)</text>
+                
+                <rect x="1000" y="630" width="350" height="100" class="component-rect" fill="#d5e8d4"/>
+                <text x="1175" y="665" class="component-label">解析器</text>
+                <text x="1175" y="690" class="component-desc">Parser</text>
+                <text x="1175" y="715" class="component-desc">词法/语法分析</text>
+                
+                <rect x="1400" y="630" width="350" height="100" class="component-rect" fill="#d5e8d4"/>
+                <text x="1575" y="665" class="component-label">预处理器</text>
+                <text x="1575" y="690" class="component-desc">Preprocessor</text>
+                <text x="1575" y="715" class="component-desc">语义检查</text>
+                
+                <!-- 服务层第二行组件 -->
+                <rect x="200" y="760" width="350" height="100" class="component-rect" fill="#d5e8d4"/>
+                <text x="375" y="795" class="component-label">优化器</text>
+                <text x="375" y="820" class="component-desc">Optimizer</text>
+                <text x="375" y="845" class="component-desc">基于成本优化</text>
+                
+                <rect x="600" y="760" width="350" height="100" class="component-rect" fill="#d5e8d4"/>
+                <text x="775" y="795" class="component-label">执行器</text>
+                <text x="775" y="820" class="component-desc">Executor</text>
+                <text x="775" y="845" class="component-desc">调用存储引擎API</text>
+                
+                <rect x="1000" y="760" width="350" height="100" class="component-rect" fill="#d5e8d4"/>
+                <text x="1175" y="795" class="component-label">缓存和缓冲区</text>
+                <text x="1175" y="820" class="component-desc">Caches & Buffers</text>
+                <text x="1175" y="845" class="component-desc">表缓存/权限缓存</text>
+                
+                <rect x="1400" y="760" width="350" height="100" class="component-rect" fill="#d5e8d4"/>
+                <text x="1575" y="795" class="component-label">内置函数</text>
+                <text x="1575" y="820" class="component-desc">Built-in Functions</text>
+                <text x="1575" y="845" class="component-desc">日期/数学/字符串</text>
+                
+                <!-- 服务层第三行组件 -->
+                <rect x="200" y="890" width="1150" height="80" class="component-rect" fill="#d5e8d4"/>
+                <text x="775" y="920" class="component-label">管理和服务工具</text>
+                <text x="775" y="940" class="component-desc">备份恢复/复制/集群/分区/视图/触发器/存储过程</text>
+                
+                <!-- 服务层到存储引擎层 -->
+                <path d="M 1100 1030 L 1100 1080" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1120" y="1060" class="arrow-label">调用存储引擎API</text>
+                
+                <!-- 存储引擎层 -->
+                <rect x="100" y="1100" width="2000" height="300" fill="url(#layer3-gradient)" class="layer-box" stroke="#2c3e50"/>
+                <text x="1100" y="1135" class="layer-title">存储引擎层 (Storage Engine Layer)</text>
+                
+                <!-- 存储引擎API -->
+                <rect x="200" y="1180" width="1800" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="1100" y="1210" class="component-label">存储引擎 API (Handler API)</text>
+                <text x="1100" y="1230" class="component-desc">统一接口，支持插件式存储引擎</text>
+                
+                <!-- 存储引擎组件 -->
+                <rect x="200" y="1290" width="300" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="350" y="1315" class="component-label">InnoDB</text>
+                <text x="350" y="1340" class="component-desc">默认，支持事务/行锁</text>
+                
+                <rect x="550" y="1290" width="300" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="700" y="1315" class="component-label">MyISAM</text>
+                <text x="700" y="1340" class="component-desc">不支持事务，表锁</text>
+                
+                <rect x="900" y="1290" width="300" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="1050" y="1315" class="component-label">Memory</text>
+                <text x="1050" y="1340" class="component-desc">内存表，临时表</text>
+                
+                <rect x="1250" y="1290" width="300" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="1400" y="1315" class="component-label">Archive</text>
+                <text x="1400" y="1340" class="component-desc">归档，高压缩</text>
+                
+                <rect x="1600" y="1290" width="300" height="80" class="component-rect" fill="#ffe6cc"/>
+                <text x="1750" y="1315" class="component-label">其他引擎</text>
+                <text x="1750" y="1340" class="component-desc">CSV/Blackhole/Federated</text>
+                
+                <!-- 存储引擎层到文件系统层 -->
+                <path d="M 1100 1380 L 1100 1430" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2"/>
+                <text x="1120" y="1410" class="arrow-label">读写数据文件</text>
+                
+                <!-- 文件系统层 -->
+                <rect x="100" y="1450" width="2000" height="300" fill="url(#layer4-gradient)" class="layer-box" stroke="#2c3e50"/>
+                <text x="1100" y="1485" class="layer-title">文件系统层 (File System Layer)</text>
+                
+                <!-- 文件系统组件 -->
+                <rect x="200" y="1540" width="350" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="375" y="1565" class="component-label">日志文件</text>
+                <text x="375" y="1590" class="component-desc">Redo/Undo/Binlog</text>
+                
+                <rect x="600" y="1540" width="350" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="775" y="1565" class="component-label">数据文件</text>
+                <text x="775" y="1590" class="component-desc">.ibd/.frm/.MYD/.MYI</text>
+                
+                <rect x="1000" y="1540" width="350" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="1175" y="1565" class="component-label">配置文件</text>
+                <text x="1175" y="1590" class="component-desc">my.cnf/my.ini</text>
+                
+                <rect x="1400" y="1540" width="350" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="1575" y="1565" class="component-label">临时文件</text>
+                <text x="1575" y="1590" class="component-desc">临时表/排序缓冲区</text>
+                
+                <!-- 文件系统底层 -->
+                <rect x="200" y="1650" width="1800" height="80" class="component-rect" fill="#e1d5e7"/>
+                <text x="1100" y="1675" class="component-label">操作系统文件系统</text>
+                <text x="1100" y="1700" class="component-desc">EXT4/XFS/NTFS + 磁盘/SSD/RAID</text>
+                
+                <!-- 左侧流程箭头 -->
+                <path d="M 350 460 Q 350 500 200 500 Q 50 500 50 575 Q 50 775 200 775 Q 350 775 350 815" class="arrow" fill="none" stroke="#2c3e50" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="100" y="600" class="arrow-label" text-anchor="middle">返回查询结果</text>
+                
+                <!-- 右侧说明框 -->
+                <rect x="1800" y="650" width="300" height="300" class="note-box"/>
+                <text x="1950" y="680" text-anchor="middle" font-weight="bold" class="note-text">MySQL 架构特点</text>
+                <text x="1950" y="710" text-anchor="middle" font-size="12" class="note-text">1. 分层架构，职责分离</text>
+                <text x="1950" y="735" text-anchor="middle" font-size="12" class="note-text">2. 插件式存储引擎</text>
+                <text x="1950" y="760" text-anchor="middle" font-size="12" class="note-text">3. 查询优化器基于成本</text>
+                <text x="1950" y="785" text-anchor="middle" font-size="12" class="note-text">4. 支持多种连接协议</text>
+                <text x="1950" y="810" text-anchor="middle" font-size="12" class="note-text">5. 支持事务和ACID</text>
+                <text x="1950" y="835" text-anchor="middle" font-size="12" class="note-text">6. 主从复制和高可用</text>
+                <text x="1950" y="860" text-anchor="middle" font-size="12" class="note-text">7. 丰富的管理工具</text>
+                <text x="1950" y="885" text-anchor="middle" font-size="12" class="note-text">8. 社区和商业版</text>
+                
+                <!-- InnoDB 详细架构 -->
+                <rect x="1800" y="1000" width="300" height="200" class="note-box"/>
+                <text x="1950" y="1025" text-anchor="middle" font-weight="bold" class="note-text">InnoDB 引擎架构</text>
+                <text x="1950" y="1050" text-anchor="middle" font-size="12" class="note-text">• 缓冲池 (Buffer Pool)</text>
+                <text x="1950" y="1075" text-anchor="middle" font-size="12" class="note-text">• 重做日志 (Redo Log)</text>
+                <text x="1950" y="1100" text-anchor="middle" font-size="12" class="note-text">• 撤销日志 (Undo Log)</text>
+                <text x="1950" y="1125" text-anchor="middle" font-size="12" class="note-text">• 自适应哈希索引</text>
+                <text x="1950" y="1150" text-anchor="middle" font-size="12" class="note-text">• 锁管理器</text>
+                <text x="1950" y="1175" text-anchor="middle" font-size="12" class="note-text">• MVCC 多版本并发控制</text>
+                
+                <!-- 查询执行流程说明 -->
+                <rect x="50" y="1000" width="300" height="200" class="note-box"/>
+                <text x="200" y="1025" text-anchor="middle" font-weight="bold" class="note-text">查询执行流程</text>
+                <text x="200" y="1050" text-anchor="middle" font-size="12" class="note-text">1. 连接器建立连接</text>
+                <text x="200" y="1075" text-anchor="middle" font-size="12" class="note-text">2. 分析器解析SQL</text>
+                <text x="200" y="1100" text-anchor="middle" font-size="12" class="note-text">3. 优化器生成执行计划</text>
+                <text x="200" y="1125" text-anchor="middle" font-size="12" class="note-text">4. 执行器调用引擎API</text>
+                <text x="200" y="1150" text-anchor="middle" font-size="12" class="note-text">5. 存储引擎读写数据</text>
+                <text x="200" y="1175" text-anchor="middle" font-size="12" class="note-text">6. 返回结果给客户端</text>
+            </svg>
+        </div>
+        
+        <div class="controls">
+            <button id="zoomIn">放大</button>
+            <button id="zoomOut">缩小</button>
+            <button id="resetView">重置视图</button>
+            <button id="downloadSVG">下载SVG</button>
+        </div>
+        
+        <div class="description">
+            <h3>MySQL 架构模型详细说明</h3>
+            
+            <div class="layer-container">
+                <h4>1. 客户端层 (Client Layer)</h4>
+                <ul>
+                    <li><span class="highlight">多种连接方式</span>：支持JDBC/ODBC、命令行客户端、各种编程语言驱动。</li>
+                    <li><span class="highlight">通信协议</span>：使用TCP/IP、命名管道、共享内存、Unix域套接字等方式与服务器通信。</li>
+                    <li><span class="highlight">连接管理</span>：客户端负责建立、维护和关闭与MySQL服务器的连接。</li>
+                </ul>
+            </div>
+            
+            <div class="layer-container">
+                <h4>2. 连接层 (Connection Layer)</h4>
+                <ul>
+                    <li><span class="highlight">连接器</span>：负责客户端连接的建立和管理，验证用户身份和权限。</li>
+                    <li><span class="highlight">连接池</span>：管理和复用数据库连接，减少连接创建开销。</li>
+                    <li><span class="highlight">线程管理</span>：MySQL使用线程池模型，每个连接对应一个线程。</li>
+                    <li><span class="highlight">连接限制</span>：通过max_connections参数控制最大并发连接数。</li>
+                </ul>
+            </div>
+            
+            <div class="layer-container">
+                <h4>3. 服务层 (Server Layer)</h4>
+                <ul>
+                    <li><span class="highlight">SQL接口</span>：接收SQL命令，返回执行结果，支持DML、DDL、DCL、TCL等SQL类型。</li>
+                    <li><span class="highlight">解析器</span>：进行词法分析和语法分析，生成解析树。</li>
+                    <li><span class="highlight">预处理器</span>：检查SQL语义，验证表和列是否存在，检查权限。</li>
+                    <li><span class="highlight">优化器</span>：基于成本的优化器，选择最优执行计划，使用索引统计信息。</li>
+                    <li><span class="highlight">执行器</span>：调用存储引擎接口执行查询，返回结果集。</li>
+                    <li><span class="highlight">查询缓存</span>：MySQL 8.0之前版本存在，缓存查询结果，8.0已移除。</li>
+                    <li><span class="highlight">内置函数</span>：日期、数学、字符串、加密等内置函数实现。</li>
+                    <li><span class="highlight">管理工具</span>：备份恢复、主从复制、分区、视图、存储过程、触发器等。</li>
+                </ul>
+            </div>
+            
+            <div class="layer-container">
+                <h4>4. 存储引擎层 (Storage Engine Layer)</h4>
+                <ul>
+                    <li><span class="highlight">插件式架构</span>：MySQL核心特性，支持多种存储引擎，可通过Handler API扩展。</li>
+                    <li><span class="highlight">InnoDB</span>：默认存储引擎，支持ACID事务、行级锁、外键、MVCC，适用于OLTP场景。</li>
+                    <li><span class="highlight">MyISAM</span>：不支持事务，表级锁，适用于读多写少的场景，如数据仓库。</li>
+                    <li><span class="highlight">Memory</span>：数据存储在内存中，适用于临时表和缓存。</li>
+                    <li><span class="highlight">其他引擎</span>：Archive（归档存储）、CSV（CSV文件格式）、Blackhole（黑洞引擎）等。</li>
+                </ul>
+            </div>
+            
+            <div class="layer-container">
+                <h4>5. 文件系统层 (File System Layer)</h4>
+                <ul>
+                    <li><span class="highlight">日志文件</span>：Redo Log（重做日志，保证持久性）、Undo Log（撤销日志，保证原子性和MVCC）、Binlog（二进制日志，用于复制和恢复）。</li>
+                    <li><span class="highlight">数据文件</span>：.ibd（InnoDB数据文件）、.frm（表结构文件）、.MYD/.MYI（MyISAM数据/索引文件）。</li>
+                    <li><span class="highlight">配置文件</span>：my.cnf（Linux）或my.ini（Windows），存储MySQL配置参数。</li>
+                    <li><span class="highlight">临时文件</span>：排序、分组、临时表等操作使用的临时文件。</li>
+                    <li><span class="highlight">操作系统层</span>：依赖操作系统的文件系统和磁盘管理功能。</li>
+                </ul>
+            </div>
+            
+            <div class="layer-container">
+                <h4>MySQL 查询执行流程</h4>
+                <ol>
+                    <li>客户端发送SQL查询请求到MySQL服务器</li>
+                    <li>连接器验证客户端身份和权限</li>
+                    <li>查询缓存（如果启用且8.0以前版本）检查是否有缓存结果</li>
+                    <li>解析器对SQL进行词法和语法分析，生成解析树</li>
+                    <li>预处理器进行语义检查，验证表和列是否存在</li>
+                    <li>优化器基于成本选择最优执行计划</li>
+                    <li>执行器调用存储引擎API执行查询</li>
+                    <li>存储引擎读写数据文件，返回数据</li>
+                    <li>执行器处理结果，返回给客户端</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const svg = document.getElementById('flowchart');
+            let scale = 1;
+            const scaleStep = 0.1;
+            const container = document.querySelector('.flowchart-container');
+            
+            // 缩放功能
+            document.getElementById('zoomIn').addEventListener('click', function() {
+                scale += scaleStep;
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transformOrigin = 'top left';
+            });
+            
+            document.getElementById('zoomOut').addEventListener('click', function() {
+                if (scale > scaleStep) {
+                    scale -= scaleStep;
+                    svg.style.transform = `scale(${scale})`;
+                    svg.style.transformOrigin = 'top left';
+                }
+            });
+            
+            document.getElementById('resetView').addEventListener('click', function() {
+                scale = 1;
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transformOrigin = 'top left';
+                container.scrollTop = 0;
+                container.scrollLeft = (svg.clientWidth - container.clientWidth) / 2;
+            });
+            
+            // 下载SVG功能
+            document.getElementById('downloadSVG').addEventListener('click', function() {
+                const serializer = new XMLSerializer();
+                const source = serializer.serializeToString(svg);
+                
+                // 添加命名空间
+                if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+                    source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+                }
+                if (!source.match(/^<svg[^>]+"http\:\/\/www\.w3\.org\/1999\/xlink"/)) {
+                    source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+                }
+                
+                const svgBlob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+                const url = URL.createObjectURL(svgBlob);
+                
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = 'mysql-architecture-model.svg';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+            });
+            
+            // 添加SVG交互效果
+            const componentRects = document.querySelectorAll('.component-rect');
+            componentRects.forEach(rect => {
+                rect.addEventListener('mouseenter', function() {
+                    this.style.filter = 'brightness(0.95)';
+                    this.style.strokeWidth = '3';
+                });
+                
+                rect.addEventListener('mouseleave', function() {
+                    this.style.filter = 'brightness(1)';
+                    this.style.strokeWidth = '2';
+                });
+            });
+            
+            // 自动滚动到中心
+            setTimeout(() => {
+                container.scrollLeft = (svg.clientWidth - container.clientWidth) / 2;
+                container.scrollTop = (svg.clientHeight - container.clientHeight) / 3;
+            }, 100);
+            
+            // 添加点击显示详细信息功能
+            const layerBoxes = document.querySelectorAll('.layer-box');
+            layerBoxes.forEach(box => {
+                box.addEventListener('click', function() {
+                    const title = this.parentNode.querySelector('.layer-title');
+                    if (title) {
+                        alert(`查看 ${title.textContent} 的详细说明`);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

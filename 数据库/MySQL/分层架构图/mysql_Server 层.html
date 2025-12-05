@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MySQL 组件结构图（Server 层与 InnoDB 交互）</title>
+  <style>
+    :root{
+      --bg:#f4fbff; --card:#eaf6ff; --accent:#1f77b4; --muted:#355e75; --text:#043447;
+      font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    body{margin:0;background:var(--bg);color:var(--text)}
+    .wrap{padding:18px}
+    .note{font-size:13px;color:var(--muted);margin-bottom:8px}
+    svg{width:100%;height:92vh;display:block}
+    .box{fill:#ffffff;stroke:rgba(31,119,180,0.14);stroke-width:1.4;rx:10}
+    .box-server{fill:linear-gradient(#ffffff,#eef8ff)}
+    .title{font-weight:700;fill:var(--accent)}
+    .txt{fill:var(--text);font-size:12px}
+    .small{font-size:11px;fill:#3f6d82}
+    .link{stroke:var(--accent);stroke-width:2;fill:none;marker-end:url(#arrow)}
+    .dashed{stroke-dasharray:6 6;opacity:0.8}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="note">下图严格对应你提供的表格：展示 Server 层（SQL 接口 / 解析器 / 优化器 / 执行器 / 元数据缓存 / Binlog）与 InnoDB 的详细交互流程。</div>
+    <svg viewBox="0 0 1400 900" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1f77b4" />
+        </marker>
+        <linearGradient id="gS" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="#ffffff" />
+          <stop offset="1" stop-color="#e8f9ff" />
+        </linearGradient>
+      </defs>
+
+      <!-- Server 层整体容器 -->
+      <rect x="40" y="40" width="520" height="780" class="box" fill="url(#gS)" />
+      <text x="60" y="72" class="title">Server 层（MySQL SQL 处理“大脑”）</text>
+
+      <!-- SQL 接口 -->
+      <rect x="64" y="100" width="480" height="88" rx="8" fill="#ffffff" stroke="rgba(31,119,180,0.06)" />
+      <text x="82" y="128" class="title">SQL 接口</text>
+      <text x="82" y="148" class="small">接收 DML / DDL / DQL / DCL；将高层 SQL 封装为引擎操作</text>
+      <text x="82" y="166" class="small">示例：INSERT 会被翻译为 InnoDB 的插入 + 加锁 + 记录日志 操作</text>
+
+      <!-- 解析器 -->
+      <rect x="64" y="204" width="480" height="92" rx="8" fill="#ffffff" stroke="rgba(31,119,180,0.06)" />
+      <text x="82" y="232" class="title">解析器（Parser）</text>
+      <text x="82" y="252" class="small">① 词法分析：拆分 SQL 为 Token</text>
+      <text x="82" y="270" class="small">② 语法分析：生成 AST，校验语法合法性</text>
+
+      <!-- 优化器 -->
+      <rect x="64" y="312" width="480" height="120" rx="8" fill="#ffffff" stroke="rgba(31,119,180,0.06)" />
+      <text x="82" y="340" class="title">优化器（Optimizer / CBO）</text>
+      <text x="82" y="360" class="small">目标：生成最优执行计划（基于成本：IO + CPU）</text>
+      <text x="82" y="378" class="small">依赖 InnoDB 索引统计（Cardinality），选择索引/连接策略</text>
+      <text x="82" y="396" class="small">若统计不准会出现“选错索引”问题</text>
+
+      <!-- 执行器 -->
+      <rect x="64" y="452" width="480" height="120" rx="8" fill="#ffffff" stroke="rgba(31,119,180,0.06)" />
+      <text x="82" y="480" class="title">执行器（Executor）</text>
+      <text x="82" y="500" class="small">调用存储引擎 API（例如 ha_innodb::read_row / update_row）</text>
+      <text x="82" y="518" class="small">处理二次过滤 / 计算（如 WHERE 的二次校验）</text>
+      <text x="82" y="536" class="small">注意：执行器会等待锁（Lock wait timeout）并返回给客户端</text>
+
+      <!-- 元数据缓存 -->
+      <rect x="64" y="588" width="220" height="98" rx="8" fill="#ffffff" stroke="rgba(31,119,180,0.06)" />
+      <text x="82" y="616" class="title">元数据缓存</text>
+      <text x="82" y="636" class="small">缓存 information_schema、权限、表结构等，以减少 IO</text>
+
+      <!-- Binlog 模块 -->
+      <rect x="328" y="588" width="216" height="98" rx="8" fill="#ffffff" stroke="rgba(31,119,180,0.06)" />
+      <text x="346" y="616" class="title">Binlog 模块</text>
+      <text x="346" y="636" class="small">记录逻辑变更（STATEMENT / ROW / MIXED），用于复制与恢复</text>
+      <text x="346" y="654" class="small">与 InnoDB 协调：通过两阶段提交保障 binlog 与 redo 一致</text>
+
+      <!-- arrows: Server -> InnoDB -->
+      <path class="link" d="M580 220 L690 220" />
+      <path class="link" d="M580 350 L690 350" />
+      <path class="link" d="M580 520 L690 520" />
+      <path class="link" d="M580 640 L700 640" />
+
+      <!-- InnoDB 区域 -->
+      <rect x="720" y="40" width="620" height="780" class="box" fill="#ffffff" stroke="rgba(31,119,180,0.14)" />
+      <text x="740" y="72" class="title">InnoDB 存储引擎（数据层）</text>
+
+      <!-- Buffer Pool -->
+      <rect x="740" y="110" width="560" height="120" rx="8" fill="#f7feff" stroke="rgba(31,119,180,0.06)" />
+      <text x="760" y="138" class="title">Buffer Pool（LRU / Free / Flush）</text>
+      <text x="760" y="158" class="small">缓存数据页、索引页、Undo 页；内存中修改先发生于此</text>
+
+      <!-- Undo / MVCC -->
+      <rect x="740" y="250" width="560" height="120" rx="8" fill="#f7feff" stroke="rgba(31,119,180,0.06)" />
+      <text x="760" y="278" class="title">Undo Log & MVCC（版本链 / Read View）</text>
+      <text x="760" y="298" class="small">记录旧版本，用于回滚与非锁定读</text>
+
+      <!-- Redo / DoubleWrite -->
+      <rect x="740" y="390" width="560" height="120" rx="8" fill="#f7feff" stroke="rgba(31,119,180,0.06)" />
+      <text x="760" y="418" class="title">Redo Log & DoubleWrite（ib_logfile / 写入顺序）</text>
+      <text x="760" y="438" class="small">Redo Buffer → 刷盘到 ib_logfile，保障持久性；DoubleWrite 防止半页写入</text>
+
+      <!-- Lock system -->
+      <rect x="740" y="530" width="560" height="120" rx="8" fill="#f7feff" stroke="rgba(31,119,180,0.06)" />
+      <text x="760" y="558" class="title">锁系统 / 事务管理（trx_id / 锁 / Deadlock）</text>
+      <text x="760" y="578" class="small">管理行锁、意向锁、Read View、死锁检测</text>
+
+      <!-- IO threads / Purge / Page Cleaner -->
+      <rect x="740" y="670" width="560" height="120" rx="8" fill="#f7feff" stroke="rgba(31,119,180,0.06)" />
+      <text x="760" y="698" class="title">后台线程：Page Cleaner / Purge / Checkpoint / IO</text>
+      <text x="760" y="718" class="small">异步刷脏页、清理过期 Undo、推进 checkpoint</text>
+
+      <!-- arrows: interactions details -->
+      <!-- SQL接口 -> Buffer Pool read/write -->
+      <path class="link" d="M580 200 L740 160" />
+      <path class="link dashed" d="M580 240 L740 260" />
+      <!-- Executor -> Lock System -->
+      <path class="link" d="M580 500 L740 590" />
+      <!-- Binlog coordination -->
+      <path class="link dashed" d="M540 680 L760 420" />
+
+      <!-- small callouts for API names -->
+      <rect x="480" y="320" width="180" height="56" rx="8" fill="#ffffff" stroke="rgba(31,119,180,0.06)"/>
+      <text x="496" y="348" class="small">存储引擎 API</text>
+      <text x="496" y="364" class="small">ha_innodb::read_row / update_row</text>
+
+      <!-- footer note -->
+      <text x="60" y="860" class="small">说明：本图严格对应你提供表格中的组件与互动说明，若需更细粒度（如每个组件的线程名或函数调用序列），我可以把对应组件扩展为子流程图。</text>
+    </svg>
+  </div>
+</body>
+</html>

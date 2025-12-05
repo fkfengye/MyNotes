@@ -1,0 +1,461 @@
+<svg width="2000" height="2800" xmlns="http://www.w3.org/2000/svg">
+  <!-- 标题 -->
+  <text x="1000" y="70" text-anchor="middle" font-size="36" font-weight="bold" fill="#333">MySQL InnoDB Undo Log 存储模型</text>
+  <text x="1000" y="110" text-anchor="middle" font-size="20" fill="#666">事务回滚与MVCC多版本控制的核心存储结构</text>
+  
+  <!-- ========== 第一部分：Undo Log核心概念 ========== -->
+  <rect x="100" y="140" width="1800" height="120" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="2"/>
+  <text x="1000" y="170" text-anchor="middle" font-size="28" font-weight="bold" fill="#2d4cd2">Undo Log 核心概念</text>
+  
+  <g font-size="18" fill="#333">
+    <text x="200" y="205">✓ 记录数据修改前的状态，用于事务回滚</text>
+    <text x="200" y="235">✓ 存储历史版本，支持MVCC一致性读</text>
+    <text x="1000" y="205">✓ 存储在Undo表空间中，独立于数据文件</text>
+    <text x="1000" y="235">✓ 通过Purge线程定期清理过期版本</text>
+  </g>
+  
+  <!-- ========== 第二部分：Undo表空间结构 ========== -->
+  <rect x="100" y="280" width="1800" height="450" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="310" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">Undo表空间结构（Undo Tablespace）</text>
+  
+  <!-- Undo表空间整体结构 -->
+  <g transform="translate(200, 360)">
+    <rect width="1600" height="150" rx="8" ry="8" fill="#ffffff" stroke="#4a6bff" stroke-width="3"/>
+    <text x="800" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#2d4cd2">Undo表空间（默认：undo_001, undo_002）</text>
+    
+    <!-- Undo段 -->
+    <rect x="100" y="50" width="1400" height="80" rx="6" ry="6" fill="#e6ecff" stroke="#4a6bff" stroke-width="2"/>
+    <text x="800" y="75" text-anchor="middle" font-size="20" font-weight="bold">包含多个Undo段（Undo Segments）</text>
+    
+    <!-- 连接线 -->
+    <path d="M800,130 L800,160" stroke="#4a6bff" stroke-width="2" fill="none"/>
+    <polygon points="800,160 795,155 805,155" fill="#4a6bff"/>
+  </g>
+  
+  <!-- Undo段详细结构 -->
+  <g transform="translate(200, 520)">
+    <text x="800" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">Undo段内部结构</text>
+    
+    <!-- Undo段1 -->
+    <g transform="translate(100, 60)">
+      <rect width="400" height="120" rx="8" ry="8" fill="#eef2ff" stroke="#4a6bff" stroke-width="2"/>
+      <text x="200" y="30" text-anchor="middle" font-size="18" font-weight="bold">Undo段1（Segment）</text>
+      
+      <!-- Undo页 -->
+      <g transform="translate(50, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页1</text>
+      </g>
+      
+      <g transform="translate(170, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页2</text>
+      </g>
+      
+      <g transform="translate(290, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页...</text>
+      </g>
+    </g>
+    
+    <!-- Undo段2 -->
+    <g transform="translate(600, 60)">
+      <rect width="400" height="120" rx="8" ry="8" fill="#eef2ff" stroke="#4a6bff" stroke-width="2"/>
+      <text x="200" y="30" text-anchor="middle" font-size="18" font-weight="bold">Undo段2（Segment）</text>
+      
+      <!-- Undo页 -->
+      <g transform="translate(50, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页1</text>
+      </g>
+      
+      <g transform="translate(170, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页2</text>
+      </g>
+      
+      <g transform="translate(290, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页...</text>
+      </g>
+    </g>
+    
+    <!-- Undo段... -->
+    <g transform="translate(1100, 60)">
+      <rect width="400" height="120" rx="8" ry="8" fill="#eef2ff" stroke="#4a6bff" stroke-width="2"/>
+      <text x="200" y="30" text-anchor="middle" font-size="18" font-weight="bold">Undo段128</text>
+      
+      <!-- Undo页 -->
+      <g transform="translate(50, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页1</text>
+      </g>
+      
+      <g transform="translate(170, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页2</text>
+      </g>
+      
+      <g transform="translate(290, 50)">
+        <rect width="100" height="50" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="1"/>
+        <text x="50" y="30" text-anchor="middle" font-size="14">Undo页...</text>
+      </g>
+    </g>
+  </g>
+  
+  <!-- ========== 第三部分：Undo页详细结构 ========== -->
+  <rect x="100" y="750" width="1800" height="500" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="780" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">Undo页详细结构（16KB页）</text>
+  
+  <!-- Undo页结构图 -->
+  <g transform="translate(300, 840)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#ffffff" stroke="#4a6bff" stroke-width="3"/>
+    
+    <!-- 页头 -->
+    <rect width="1400" height="40" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    <text x="700" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">Undo页头（Undo Page Header）</text>
+    
+    <!-- 内容区域 -->
+    <rect y="40" width="1400" height="80" fill="#f8f8f8"/>
+    
+    <!-- 分割线 -->
+    <line x1="350" y1="40" x2="350" y2="120" stroke="#4a6bff" stroke-width="1"/>
+    <line x1="700" y1="40" x2="700" y2="120" stroke="#4a6bff" stroke-width="1"/>
+    <line x1="1050" y1="40" x2="1050" y2="120" stroke="#4a6bff" stroke-width="1"/>
+    
+    <!-- 字段说明 -->
+    <text x="175" y="65" text-anchor="middle" font-size="16" font-weight="bold">TRX_UNDO_STATE</text>
+    <rect x="50" y="70" width="250" height="40" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="175" y="95" text-anchor="middle" font-size="14">状态：ACTIVE/COMMITTED</text>
+    
+    <text x="525" y="65" text-anchor="middle" font-size="16" font-weight="bold">TRX_UNDO_LAST_LOG</text>
+    <rect x="400" y="70" width="250" height="40" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="525" y="95" text-anchor="middle" font-size="14">最后Undo记录位置</text>
+    
+    <text x="875" y="65" text-anchor="middle" font-size="16" font-weight="bold">TRX_UNDO_FSEG_HEADER</text>
+    <rect x="750" y="70" width="250" height="40" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="875" y="95" text-anchor="middle" font-size="14">段头信息</text>
+    
+    <text x="1225" y="65" text-anchor="middle" font-size="16" font-weight="bold">其他字段</text>
+    <rect x="1100" y="70" width="250" height="40" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="1225" y="95" text-anchor="middle" font-size="14">XID、事务ID等</text>
+  </g>
+  
+  <!-- Undo记录区域 -->
+  <g transform="translate(300, 980)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#ffffff" stroke="#4a6bff" stroke-width="2"/>
+    
+    <!-- 标题 -->
+    <rect width="1400" height="40" fill="#ffebcc" stroke="#ff8a3d" stroke-width="2"/>
+    <text x="700" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#cc5a1a">Undo记录区域（Undo Records）</text>
+    
+    <!-- 内容 -->
+    <g transform="translate(100, 50)">
+      <!-- Undo记录1 -->
+      <rect width="400" height="50" rx="4" ry="4" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+      <text x="200" y="25" text-anchor="middle" font-size="14">Undo记录1（最新）</text>
+      <text x="200" y="40" text-anchor="middle" font-size="12" fill="#666">事务100，类型：INSERT</text>
+      
+      <!-- 连接线 -->
+      <path d="M400,25 L440,25" stroke="#34c759" stroke-width="2" fill="none"/>
+      <polygon points="440,25 435,20 435,30" fill="#34c759"/>
+      
+      <!-- Undo记录2 -->
+      <rect x="440" width="400" height="50" rx="4" ry="4" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+      <text x="640" y="25" text-anchor="middle" font-size="14">Undo记录2</text>
+      <text x="640" y="40" text-anchor="middle" font-size="12" fill="#666">事务150，类型：UPDATE</text>
+      
+      <!-- 连接线 -->
+      <path d="M840,25 L880,25" stroke="#34c759" stroke-width="2" fill="none"/>
+      <polygon points="880,25 875,20 875,30" fill="#34c759"/>
+      
+      <!-- Undo记录... -->
+      <rect x="880" width="400" height="50" rx="4" ry="4" fill="#ffffff" stroke="#ff8a3d" stroke-width="1"/>
+      <text x="1080" y="25" text-anchor="middle" font-size="14">Undo记录...</text>
+      <text x="1080" y="40" text-anchor="middle" font-size="12" fill="#666">更多Undo记录</text>
+    </g>
+  </g>
+  
+  <!-- Undo记录链表说明 -->
+  <g transform="translate(300, 1120)">
+    <rect width="1400" height="100" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+    <text x="700" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">Undo记录链表结构</text>
+    
+    <g font-size="16" fill="#333">
+      <text x="100" y="60">• 每个Undo页中的记录按插入时间倒序排列（最新在前）</text>
+      <text x="100" y="85">• 同一事务的Undo记录通过指针链接</text>
+      <text x="100" y="110">• 支持从当前版本回溯到历史版本</text>
+    </g>
+  </g>
+  
+  <!-- ========== 第四部分：Undo记录详细结构 ========== -->
+  <rect x="100" y="1280" width="1800" height="550" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="1310" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">Undo记录详细结构（Undo Record）</text>
+  
+  <!-- INSERT类型Undo记录 -->
+  <g transform="translate(300, 1370)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">INSERT类型Undo记录结构</text>
+    
+    <rect width="1400" height="120" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="3"/>
+    
+    <!-- 字段分割 -->
+    <line x1="200" y1="0" x2="200" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="400" y1="0" x2="400" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="600" y1="0" x2="600" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="800" y1="0" x2="800" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="1000" y1="0" x2="1000" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="1200" y1="0" x2="1200" y2="120" stroke="#34c759" stroke-width="1"/>
+    
+    <!-- 字段内容 -->
+    <text x="100" y="25" text-anchor="middle" font-size="16" font-weight="bold">记录头</text>
+    <rect x="20" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="100" y="55" text-anchor="middle" font-size="14">类型: INSERT</text>
+    <text x="100" y="85" text-anchor="middle" font-size="12" fill="#666">Undo No: 1</text>
+    
+    <text x="300" y="25" text-anchor="middle" font-size="16" font-weight="bold">事务ID</text>
+    <rect x="220" y="35" width="160" height="30" rx="3" ry="3" fill="#ffebcc" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="300" y="55" text-anchor="middle" font-size="16" font-weight="bold">100</text>
+    
+    <text x="500" y="25" text-anchor="middle" font-size="16" font-weight="bold">表ID</text>
+    <rect x="420" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="500" y="55" text-anchor="middle" font-size="14">12345</text>
+    
+    <text x="700" y="25" text-anchor="middle" font-size="16" font-weight="bold">主键信息</text>
+    <rect x="620" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="700" y="55" text-anchor="middle" font-size="14">id=1001</text>
+    
+    <text x="900" y="25" text-anchor="middle" font-size="16" font-weight="bold">回滚指针</text>
+    <rect x="820" y="35" width="160" height="30" rx="3" ry="3" fill="#e6ffe6" stroke="#34c759" stroke-width="1"/>
+    <text x="900" y="55" text-anchor="middle" font-size="14">prev_log: null</text>
+    
+    <text x="1100" y="25" text-anchor="middle" font-size="16" font-weight="bold">旧数据</text>
+    <rect x="1020" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="1100" y="55" text-anchor="middle" font-size="14">空（INSERT无旧值）</text>
+    
+    <text x="1300" y="25" text-anchor="middle" font-size="16" font-weight="bold">下一记录</text>
+    <rect x="1220" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="1300" y="55" text-anchor="middle" font-size="14">next: null</text>
+  </g>
+  
+  <!-- UPDATE类型Undo记录 -->
+  <g transform="translate(300, 1520)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">UPDATE类型Undo记录结构</text>
+    
+    <rect width="1400" height="120" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="3"/>
+    
+    <!-- 字段分割 -->
+    <line x1="200" y1="0" x2="200" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="400" y1="0" x2="400" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="600" y1="0" x2="600" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="800" y1="0" x2="800" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="1000" y1="0" x2="1000" y2="120" stroke="#34c759" stroke-width="1"/>
+    <line x1="1200" y1="0" x2="1200" y2="120" stroke="#34c759" stroke-width="1"/>
+    
+    <!-- 字段内容 -->
+    <text x="100" y="25" text-anchor="middle" font-size="16" font-weight="bold">记录头</text>
+    <rect x="20" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="100" y="55" text-anchor="middle" font-size="14">类型: UPDATE</text>
+    <text x="100" y="85" text-anchor="middle" font-size="12" fill="#666">Undo No: 2</text>
+    
+    <text x="300" y="25" text-anchor="middle" font-size="16" font-weight="bold">事务ID</text>
+    <rect x="220" y="35" width="160" height="30" rx="3" ry="3" fill="#ffebcc" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="300" y="55" text-anchor="middle" font-size="16" font-weight="bold">150</text>
+    
+    <text x="500" y="25" text-anchor="middle" font-size="16" font-weight="bold">表ID</text>
+    <rect x="420" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="500" y="55" text-anchor="middle" font-size="14">12345</text>
+    
+    <text x="700" y="25" text-anchor="middle" font-size="16" font-weight="bold">主键信息</text>
+    <rect x="620" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="700" y="55" text-anchor="middle" font-size="14">id=1001</text>
+    
+    <text x="900" y="25" text-anchor="middle" font-size="16" font-weight="bold">回滚指针</text>
+    <rect x="820" y="35" width="160" height="30" rx="3" ry="3" fill="#e6ffe6" stroke="#34c759" stroke-width="1"/>
+    <text x="900" y="55" text-anchor="middle" font-size="14">prev_log: →前一个</text>
+    
+    <text x="1100" y="25" text-anchor="middle" font-size="16" font-weight="bold">旧数据</text>
+    <rect x="1020" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="1100" y="55" text-anchor="middle" font-size="14">name='Alice'</text>
+    
+    <text x="1300" y="25" text-anchor="middle" font-size="16" font-weight="bold">更新信息</text>
+    <rect x="1220" y="35" width="160" height="30" rx="3" ry="3" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <text x="1300" y="55" text-anchor="middle" font-size="14">更新的列位图</text>
+  </g>
+  
+  <!-- Undo记录类型说明 -->
+  <g transform="translate(300, 1660)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+    <text x="700" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">Undo记录类型说明</text>
+    
+    <g font-size="16" fill="#333">
+      <text x="100" y="60">• INSERT类型：记录插入操作，回滚时只需删除记录</text>
+      <text x="100" y="85">• UPDATE类型：记录更新前的数据，回滚时恢复旧值</text>
+      <text x="100" y="110">• DELETE类型：记录删除前的完整数据，回滚时重新插入</text>
+    </g>
+  </g>
+  
+  <!-- ========== 第五部分：事务Undo链表示例 ========== -->
+  <rect x="100" y="1850" width="1800" height="600" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="1880" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">事务Undo链表示例</text>
+  
+  <!-- 事务操作序列 -->
+  <g transform="translate(300, 1940)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">事务操作序列示例</text>
+    
+    <!-- 时间线 -->
+    <line x1="100" y1="60" x2="1300" y2="60" stroke="#666" stroke-width="2" fill="none"/>
+    
+    <!-- 操作点 -->
+    <g transform="translate(100, 60)">
+      <circle cx="0" cy="0" r="10" fill="#4a6bff"/>
+      <text x="0" y="30" text-anchor="middle" font-size="14">开始事务</text>
+      <text x="0" y="45" text-anchor="middle" font-size="12" fill="#666">事务ID: 100</text>
+    </g>
+    
+    <g transform="translate(400, 60)">
+      <circle cx="0" cy="0" r="10" fill="#34c759"/>
+      <text x="0" y="30" text-anchor="middle" font-size="14">INSERT</text>
+      <text x="0" y="45" text-anchor="middle" font-size="12" fill="#666">id=1001</text>
+    </g>
+    
+    <g transform="translate(700, 60)">
+      <circle cx="0" cy="0" r="10" fill="#ff8a3d"/>
+      <text x="0" y="30" text-anchor="middle" font-size="14">UPDATE</text>
+      <text x="0" y="45" text-anchor="middle" font-size="12" fill="#666">name='Bob'</text>
+    </g>
+    
+    <g transform="translate(1000, 60)">
+      <circle cx="0" cy="0" r="10" fill="#ff8a3d"/>
+      <text x="0" y="30" text-anchor="middle" font-size="14">UPDATE</text>
+      <text x="0" y="45" text-anchor="middle" font-size="12" fill="#666">age=30</text>
+    </g>
+    
+    <g transform="translate(1300, 60)">
+      <circle cx="0" cy="0" r="10" fill="#ff3366"/>
+      <text x="0" y="30" text-anchor="middle" font-size="14">DELETE</text>
+      <text x="0" y="45" text-anchor="middle" font-size="12" fill="#666">删除记录</text>
+    </g>
+  </g>
+  
+  <!-- Undo链表示例 -->
+  <g transform="translate(300, 2100)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">事务Undo链表（从最新到最旧）</text>
+    
+    <!-- Undo记录1（DELETE） -->
+    <g transform="translate(100, 60)">
+      <rect width="300" height="80" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+      <text x="150" y="25" text-anchor="middle" font-size="16" font-weight="bold">Undo记录4</text>
+      <text x="150" y="45" text-anchor="middle" font-size="14">类型: DELETE | Undo No: 4</text>
+      <text x="150" y="65" text-anchor="middle" font-size="12" fill="#666">存储完整记录数据</text>
+    </g>
+    
+    <!-- 连接线 -->
+    <path d="M400,100 L500,100" stroke="#34c759" stroke-width="2" fill="none"/>
+    <polygon points="500,100 495,95 495,105" fill="#34c759"/>
+    
+    <!-- Undo记录2（UPDATE age） -->
+    <g transform="translate(500, 60)">
+      <rect width="300" height="80" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+      <text x="150" y="25" text-anchor="middle" font-size="16" font-weight="bold">Undo记录3</text>
+      <text x="150" y="45" text-anchor="middle" font-size="14">类型: UPDATE | Undo No: 3</text>
+      <text x="150" y="65" text-anchor="middle" font-size="12" fill="#666">旧值: age=25</text>
+    </g>
+    
+    <!-- 连接线 -->
+    <path d="M800,100 L900,100" stroke="#34c759" stroke-width="2" fill="none"/>
+    <polygon points="900,100 895,95 895,105" fill="#34c759"/>
+    
+    <!-- Undo记录3（UPDATE name） -->
+    <g transform="translate(900, 60)">
+      <rect width="300" height="80" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+      <text x="150" y="25" text-anchor="middle" font-size="16" font-weight="bold">Undo记录2</text>
+      <text x="150" y="45" text-anchor="middle" font-size="14">类型: UPDATE | Undo No: 2</text>
+      <text x="150" y="65" text-anchor="middle" font-size="12" fill="#666">旧值: name='Alice'</text>
+    </g>
+    
+    <!-- 连接线 -->
+    <path d="M1200,100 L1300,100" stroke="#34c759" stroke-width="2" fill="none"/>
+    <polygon points="1300,100 1295,95 1295,105" fill="#34c759"/>
+    
+    <!-- Undo记录4（INSERT） -->
+    <g transform="translate(1300, 60)">
+      <rect width="300" height="80" rx="6" ry="6" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+      <text x="150" y="25" text-anchor="middle" font-size="16" font-weight="bold">Undo记录1</text>
+      <text x="150" y="45" text-anchor="middle" font-size="14">类型: INSERT | Undo No: 1</text>
+      <text x="150" y="65" text-anchor="middle" font-size="12" fill="#666">主键: id=1001</text>
+    </g>
+  </g>
+  
+  <!-- 回滚说明 -->
+  <g transform="translate(300, 2280)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+    <text x="700" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">事务回滚过程</text>
+    
+    <g font-size="16" fill="#333">
+      <text x="100" y="60">1. 从最新的Undo记录开始（Undo No: 4）</text>
+      <text x="100" y="85">2. 执行DELETE的逆操作：重新插入完整记录</text>
+      <text x="100" y="110">3. 继续处理Undo记录3：恢复age=25</text>
+      <text x="100" y="135">4. 处理Undo记录2：恢复name='Alice'</text>
+      <text x="100" y="160">5. 处理Undo记录1：删除记录（INSERT的逆操作）</text>
+    </g>
+  </g>
+  
+  <!-- ========== 第六部分：Purge清理机制 ========== -->
+  <rect x="100" y="2480" width="1800" height="280" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="1000" y="2510" text-anchor="middle" font-size="30" font-weight="bold" fill="#333">Purge清理机制</text>
+  
+  <!-- Purge线程工作流程 -->
+  <g transform="translate(300, 2570)">
+    <text x="700" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">Purge线程工作流程</text>
+    
+    <!-- 流程图 -->
+    <g transform="translate(100, 60)">
+      <!-- 步骤1 -->
+      <rect width="200" height="60" rx="6" ry="6" fill="#e6ecff" stroke="#4a6bff" stroke-width="2"/>
+      <text x="100" y="35" text-anchor="middle" font-size="16" font-weight="bold">扫描历史链表</text>
+    </g>
+    
+    <!-- 箭头 -->
+    <path d="M300,90 L400,90" stroke="#4a6bff" stroke-width="2" fill="none"/>
+    <polygon points="400,90 395,85 395,95" fill="#4a6bff"/>
+    
+    <!-- 步骤2 -->
+    <g transform="translate(400, 60)">
+      <rect width="200" height="60" rx="6" ry="6" fill="#e6ecff" stroke="#4a6bff" stroke-width="2"/>
+      <text x="100" y="35" text-anchor="middle" font-size="16" font-weight="bold">检查Undo记录</text>
+    </g>
+    
+    <!-- 箭头 -->
+    <path d="M600,90 L700,90" stroke="#4a6bff" stroke-width="2" fill="none"/>
+    <polygon points="700,90 695,85 695,95" fill="#4a6bff"/>
+    
+    <!-- 步骤3 -->
+    <g transform="translate(700, 60)">
+      <rect width="200" height="60" rx="6" ry="6" fill="#e6ecff" stroke="#4a6bff" stroke-width="2"/>
+      <text x="100" y="35" text-anchor="middle" font-size="16" font-weight="bold">清理条件判断</text>
+    </g>
+    
+    <!-- 箭头 -->
+    <path d="M900,90 L1000,90" stroke="#4a6bff" stroke-width="2" fill="none"/>
+    <polygon points="1000,90 995,85 995,95" fill="#4a6bff"/>
+    
+    <!-- 步骤4 -->
+    <g transform="translate(1000, 60)">
+      <rect width="200" height="60" rx="6" ry="6" fill="#e6ecff" stroke="#4a6bff" stroke-width="2"/>
+      <text x="100" y="35" text-anchor="middle" font-size="16" font-weight="bold">清理过期数据</text>
+    </g>
+  </g>
+  
+  <!-- 清理条件说明 -->
+  <g transform="translate(300, 2700)">
+    <rect width="1400" height="120" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+    <text x="700" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">Purge清理条件</text>
+    
+    <g font-size="16" fill="#333">
+      <text x="100" y="60">• 事务已提交</text>
+      <text x="100" y="85">• 没有活跃事务需要该Undo记录（Read View不再需要）</text>
+      <text x="100" y="110">• 对应数据页中的删除标记已处理</text>
+      <text x="100" y="135">• 系统不处于恢复模式</text>
+    </g>
+  </g>
+</svg>
