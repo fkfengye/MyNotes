@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis 跳表 - 稀疏索引结构可视化</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            max-width: 1400px;
+            width: 100%;
+            position: relative;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 25px 40px;
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+            color: #ecf0f1;
+        }
+        
+        .header .subtitle {
+            font-size: 16px;
+            color: #bdc3c7;
+            margin-bottom: 15px;
+        }
+        
+        .header-stats {
+            display: flex;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px 20px;
+            border-radius: 10px;
+            min-width: 200px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #95a5a6;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #3498db;
+        }
+        
+        .content {
+            display: flex;
+            padding: 30px;
+            gap: 40px;
+        }
+        
+        .visualization {
+            flex: 2;
+            min-height: 700px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            position: relative;
+            overflow: auto;
+        }
+        
+        .controls {
+            flex: 1;
+            background: #f5f7fa;
+            border-radius: 15px;
+            padding: 25px;
+            max-width: 400px;
+        }
+        
+        .controls h3 {
+            color: #2c3e50;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+            font-size: 22px;
+        }
+        
+        .control-group {
+            margin-bottom: 30px;
+        }
+        
+        .control-group h4 {
+            color: #34495e;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .slider-container {
+            margin: 15px 0;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .slider-label span {
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        
+        .slider-label .value {
+            color: #2c3e50;
+            font-weight: bold;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+        
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(52, 152, 219, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button.secondary {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
+        }
+        
+        button.danger {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+        }
+        
+        .legend {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 30px;
+            border: 2px solid #ecf0f1;
+        }
+        
+        .legend h4 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .legend-items {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .legend-text {
+            font-size: 14px;
+            color: #34495e;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 20px;
+            max-width: 300px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            border-left: 5px solid #3498db;
+            display: none;
+        }
+        
+        .info-panel.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .info-panel h4 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        
+        .info-panel p {
+            color: #7f8c8d;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: #95a5a6;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        
+        .close-btn:hover {
+            background: #f5f7fa;
+            color: #e74c3c;
+        }
+        
+        .search-path {
+            stroke-width: 3;
+            stroke: #e74c3c;
+            fill: none;
+            stroke-dasharray: 10, 5;
+            animation: dash 1s linear infinite;
+            display: none;
+        }
+        
+        @keyframes dash {
+            to { stroke-dashoffset: 100; }
+        }
+        
+        .node-text {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-weight: bold;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        .layer-label {
+            font-size: 14px;
+            font-weight: bold;
+            fill: #34495e;
+            text-anchor: middle;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        .probability-display {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(44, 62, 80, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Consolas', monospace;
+            font-size: 14px;
+            max-width: 300px;
+        }
+        
+        .probability-display h4 {
+            color: #3498db;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .probability-list {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .probability-list li {
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 5px;
+        }
+        
+        @media (max-width: 1200px) {
+            .content {
+                flex-direction: column;
+            }
+            
+            .controls {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Redis 跳表（Skip List）稀疏索引可视化</h1>
+            <div class="subtitle">多层链表结构，每层是下一层的"稀疏索引"</div>
+            <div class="header-stats">
+                <div class="stat-item">
+                    <div class="stat-label">节点数量</div>
+                    <div class="stat-value" id="nodeCount">20</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">最大层数</div>
+                    <div class="stat-value" id="maxLevel">4</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">抽样概率</div>
+                    <div class="stat-value" id="probability">0.5</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">平均层数</div>
+                    <div class="stat-value" id="avgLevel">1.33</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="visualization" id="visualization">
+                <svg id="skipListSvg" width="1200" height="650" xmlns="http://www.w3.org/2000/svg">
+                    <!-- SVG内容将通过JavaScript动态生成 -->
+                </svg>
+                
+                <div class="probability-display">
+                    <h4>层级概率分布 (p=0.5)</h4>
+                    <ul class="probability-list" id="probabilityList">
+                        <!-- 概率列表将通过JavaScript生成 -->
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <h3>跳表配置与控制</h3>
+                
+                <div class="control-group">
+                    <h4>跳表参数配置</h4>
+                    
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>节点数量</span>
+                            <span class="value" id="nodeCountValue">20</span>
+                        </div>
+                        <input type="range" id="nodeCountSlider" min="5" max="50" value="20" step="1">
+                    </div>
+                    
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>最大层数限制</span>
+                            <span class="value" id="maxLevelValue">4</span>
+                        </div>
+                        <input type="range" id="maxLevelSlider" min="1" max="8" value="4" step="1">
+                    </div>
+                    
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>抽样概率 (p)</span>
+                            <span class="value" id="probabilityValue">0.5</span>
+                        </div>
+                        <input type="range" id="probabilitySlider" min="0.1" max="0.9" value="0.5" step="0.1">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h4>操作演示</h4>
+                    <div class="button-group">
+                        <button onclick="searchValue(35)" id="searchBtn">搜索元素</button>
+                        <button onclick="insertRandomNode()" class="secondary" id="insertBtn">插入元素</button>
+                        <button onclick="deleteRandomNode()" class="danger" id="deleteBtn">删除元素</button>
+                        <button onclick="showAllConnections()" id="connectionsBtn">显示连接</button>
+                    </div>
+                    
+                    <div class="button-group" style="margin-top: 10px;">
+                        <button onclick="regenerateSkipList()" style="grid-column: span 2;">重新生成跳表</button>
+                    </div>
+                </div>
+                
+                <div class="legend">
+                    <h4>图例说明</h4>
+                    <div class="legend-items">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #2c3e50;"></div>
+                            <div class="legend-text">基础层（第0层）</div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #3498db;"></div>
+                            <div class="legend-text">第1层索引</div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #2ecc71;"></div>
+                            <div class="legend-text">第2层索引</div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #e74c3c;"></div>
+                            <div class="legend-text">第3层索引</div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #f39c12;"></div>
+                            <div class="legend-text">第4层索引</div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #9b59b6;"></div>
+                            <div class="legend-text">搜索路径</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="info-panel" id="infoPanel">
+            <button class="close-btn" onclick="hideInfoPanel()">×</button>
+            <h4 id="infoTitle">跳表结构说明</h4>
+            <p id="infoContent">跳表是一种多层有序链表，每一层都是下一层的稀疏索引，通过随机抽样构建。</p>
+            <div id="infoDetails">
+                <!-- 详细信息将通过JavaScript动态填充 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 跳表数据结构
+        class SkipListNode {
+            constructor(value, maxLevel) {
+                this.value = value;
+                this.maxLevel = maxLevel;
+                this.level = 0; // 实际层数
+                this.forward = new Array(maxLevel).fill(null);
+                this.span = new Array(maxLevel).fill(0);
+                this.backward = null;
+                this.isHead = false;
+                this.isTail = false;
+            }
+        }
+
+        class SkipList {
+            constructor(maxLevel = 4, probability = 0.5) {
+                this.maxLevel = maxLevel;
+                this.probability = probability;
+                this.head = new SkipListNode(null, maxLevel);
+                this.head.isHead = true;
+                this.tail = null;
+                this.length = 0;
+                this.nodes = [];
+                this.currentMaxLevel = 0;
+            }
+            
+            randomLevel() {
+                let level = 0;
+                while (Math.random() < this.probability && level < this.maxLevel - 1) {
+                    level++;
+                }
+                return level;
+            }
+            
+            insert(value) {
+                const newNode = new SkipListNode(value, this.maxLevel);
+                newNode.level = this.randomLevel();
+                this.nodes.push(newNode);
+                this.nodes.sort((a, b) => a.value - b.value);
+                
+                this.length++;
+                this.currentMaxLevel = Math.max(this.currentMaxLevel, newNode.level);
+                
+                // 重建连接
+                this.rebuildConnections();
+            }
+            
+            rebuildConnections() {
+                // 清空所有连接
+                this.head.forward.fill(null);
+                this.head.span.fill(0);
+                
+                if (this.nodes.length === 0) {
+                    this.tail = null;
+                    return;
+                }
+                
+                // 设置头节点
+                for (let i = 0; i <= this.currentMaxLevel; i++) {
+                    // 找到第i层的第一个节点
+                    const firstNodeAtLevel = this.nodes.find(node => node.level >= i);
+                    if (firstNodeAtLevel) {
+                        this.head.forward[i] = firstNodeAtLevel;
+                        this.head.span[i] = this.nodes.indexOf(firstNodeAtLevel) + 1;
+                    }
+                }
+                
+                // 为每个节点建立连接
+                for (let i = 0; i < this.nodes.length; i++) {
+                    const node = this.nodes[i];
+                    node.backward = i > 0 ? this.nodes[i - 1] : this.head;
+                    
+                    // 为每一层建立前向连接
+                    for (let level = 0; level <= node.level; level++) {
+                        // 找到当前层下一个节点
+                        let nextNode = null;
+                        let span = 1;
+                        
+                        for (let j = i + 1; j < this.nodes.length; j++) {
+                            if (this.nodes[j].level >= level) {
+                                nextNode = this.nodes[j];
+                                span = j - i;
+                                break;
+                            }
+                        }
+                        
+                        node.forward[level] = nextNode;
+                        node.span[level] = span;
+                    }
+                    
+                    // 更高层没有连接
+                    for (let level = node.level + 1; level < this.maxLevel; level++) {
+                        node.forward[level] = null;
+                        node.span[level] = 0;
+                    }
+                }
+                
+                this.tail = this.nodes[this.nodes.length - 1];
+            }
+            
+            search(value) {
+                if (this.nodes.length === 0) return null;
+                
+                const path = [];
+                let current = this.head;
+                
+                // 从最高层开始搜索
+                for (let level = this.currentMaxLevel; level >= 0; level--) {
+                    while (current.forward[level] && current.forward[level].value < value) {
+                        current = current.forward[level];
+                        path.push({node: current, level: level});
+                    }
+                }
+                
+                // 移动到目标节点或前一个节点
+                current = current.forward[0];
+                if (current && current.value === value) {
+                    path.push({node: current, level: 0});
+                    return {found: true, node: current, path: path};
+                }
+                
+                return {found: false, node: null, path: path};
+            }
+            
+            delete(value) {
+                const searchResult = this.search(value);
+                if (!searchResult.found) return false;
+                
+                const nodeToDelete = searchResult.node;
+                const index = this.nodes.indexOf(nodeToDelete);
+                
+                if (index === -1) return false;
+                
+                // 从节点列表中移除
+                this.nodes.splice(index, 1);
+                this.length--;
+                
+                // 更新当前最大层数
+                this.currentMaxLevel = 0;
+                for (const node of this.nodes) {
+                    this.currentMaxLevel = Math.max(this.currentMaxLevel, node.level);
+                }
+                
+                // 重建连接
+                this.rebuildConnections();
+                
+                return true;
+            }
+            
+            generateRandomValues(count, min = 1, max = 100) {
+                const values = new Set();
+                while (values.size < count) {
+                    values.add(Math.floor(Math.random() * (max - min + 1)) + min);
+                }
+                return Array.from(values).sort((a, b) => a - b);
+            }
+            
+            initializeWithRandomValues(count) {
+                this.nodes = [];
+                this.length = 0;
+                this.currentMaxLevel = 0;
+                
+                const values = this.generateRandomValues(count);
+                for (const value of values) {
+                    this.insert(value);
+                }
+            }
+            
+            getLevelDistribution() {
+                const distribution = new Array(this.maxLevel + 1).fill(0);
+                for (const node of this.nodes) {
+                    distribution[node.level]++;
+                }
+                return distribution;
+            }
+            
+            getProbabilityDistribution() {
+                const distribution = [];
+                for (let i = 0; i <= this.maxLevel; i++) {
+                    const prob = Math.pow(this.probability, i);
+                    distribution.push({
+                        level: i,
+                        probability: prob,
+                        expected: Math.floor(this.length * prob)
+                    });
+                }
+                return distribution;
+            }
+        }
+
+        // 全局跳表实例
+        let skipList = new SkipList(4, 0.5);
+        
+        // SVG绘制参数
+        const config = {
+            nodeWidth: 60,
+            nodeHeight: 40,
+            layerHeight: 80,
+            baseY: 100,
+            spacingX: 70,
+            colors: {
+                head: '#2c3e50',
+                level0: '#2c3e50',
+                level1: '#3498db',
+                level2: '#2ecc71',
+                level3: '#e74c3c',
+                level4: '#f39c12',
+                level5: '#9b59b6',
+                level6: '#1abc9c',
+                level7: '#d35400',
+                search: '#9b59b6',
+                highlight: '#e74c3c',
+                insert: '#2ecc71',
+                delete: '#e74c3c',
+                text: '#2c3e50',
+                background: '#f8f9fa'
+            }
+        };
+
+        // 初始化跳表
+        function initializeSkipList() {
+            skipList.initializeWithRandomValues(20);
+            updateStats();
+            drawSkipList();
+            updateProbabilityDisplay();
+        }
+
+        // 更新统计信息
+        function updateStats() {
+            document.getElementById('nodeCount').textContent = skipList.length;
+            document.getElementById('maxLevel').textContent = skipList.currentMaxLevel + 1;
+            document.getElementById('probability').textContent = skipList.probability;
+            
+            // 计算平均层数
+            let totalLevels = 0;
+            for (const node of skipList.nodes) {
+                totalLevels += node.level + 1; // +1 因为层数从0开始
+            }
+            const avgLevel = skipList.length > 0 ? (totalLevels / skipList.length).toFixed(2) : '0.00';
+            document.getElementById('avgLevel').textContent = avgLevel;
+            
+            // 更新滑块显示值
+            document.getElementById('nodeCountValue').textContent = document.getElementById('nodeCountSlider').value;
+            document.getElementById('maxLevelValue').textContent = document.getElementById('maxLevelSlider').value;
+            document.getElementById('probabilityValue').textContent = document.getElementById('probabilitySlider').value;
+        }
+
+        // 更新概率显示
+        function updateProbabilityDisplay() {
+            const distribution = skipList.getProbabilityDistribution();
+            const listElement = document.getElementById('probabilityList');
+            listElement.innerHTML = '';
+            
+            for (const item of distribution) {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>层 ${item.level}:</span>
+                    <span>${(item.probability * 100).toFixed(1)}%</span>
+                `;
+                listElement.appendChild(li);
+            }
+        }
+
+        // 绘制跳表
+        function drawSkipList() {
+            const svg = document.getElementById('skipListSvg');
+            svg.innerHTML = '';
+            
+            // 设置SVG尺寸
+            const totalWidth = Math.max(1200, skipList.length * config.spacingX + 200);
+            const totalHeight = (skipList.maxLevel + 2) * config.layerHeight + config.baseY;
+            svg.setAttribute('width', totalWidth);
+            svg.setAttribute('height', totalHeight);
+            
+            // 绘制背景网格
+            drawGrid(svg, totalWidth, totalHeight);
+            
+            // 绘制层标签
+            drawLayerLabels(svg);
+            
+            // 绘制所有节点
+            drawNodes(svg);
+            
+            // 绘制所有连接
+            drawConnections(svg);
+        }
+
+        // 绘制网格
+        function drawGrid(svg, width, height) {
+            const gridGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            gridGroup.setAttribute('class', 'grid');
+            
+            // 水平线
+            for (let i = 0; i <= skipList.maxLevel; i++) {
+                const y = config.baseY + i * config.layerHeight;
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', '50');
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', width - 50);
+                line.setAttribute('y2', y);
+                line.setAttribute('stroke', i === 0 ? '#34495e' : '#dfe6e9');
+                line.setAttribute('stroke-width', i === 0 ? '2' : '1');
+                line.setAttribute('stroke-dasharray', i === 0 ? 'none' : '5,5');
+                gridGroup.appendChild(line);
+            }
+            
+            svg.appendChild(gridGroup);
+        }
+
+        // 绘制层标签
+        function drawLayerLabels(svg) {
+            const labelsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            
+            for (let i = 0; i <= skipList.maxLevel; i++) {
+                const y = config.baseY + i * config.layerHeight - 20;
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', '30');
+                text.setAttribute('y', y);
+                text.setAttribute('class', 'layer-label');
+                text.textContent = `第${i}层${i === 0 ? ' (基础层)' : ' (稀疏索引)'}`;
+                labelsGroup.appendChild(text);
+            }
+            
+            svg.appendChild(labelsGroup);
+        }
+
+        // 绘制节点
+        function drawNodes(svg) {
+            const nodesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            
+            // 绘制头节点
+            const headX = 100;
+            const headY = config.baseY;
+            drawNode(nodesGroup, headX, headY, 'HEAD', config.colors.head, true);
+            
+            // 绘制数据节点
+            for (let i = 0; i < skipList.nodes.length; i++) {
+                const node = skipList.nodes[i];
+                const x = 200 + i * config.spacingX;
+                
+                // 在每个层上绘制节点（如果存在）
+                for (let level = 0; level <= node.level; level++) {
+                    const y = config.baseY + level * config.layerHeight;
+                    const color = config.colors[`level${level}`] || config.colors.level0;
+                    drawNode(nodesGroup, x, y, node.value, color, false, level);
+                }
+            }
+            
+            svg.appendChild(nodesGroup);
+        }
+
+        // 绘制单个节点
+        function drawNode(group, x, y, value, color, isHead = false, level = 0) {
+            // 节点矩形
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', x - config.nodeWidth / 2);
+            rect.setAttribute('y', y - config.nodeHeight / 2);
+            rect.setAttribute('width', config.nodeWidth);
+            rect.setAttribute('height', config.nodeHeight);
+            rect.setAttribute('rx', '8');
+            rect.setAttribute('ry', '8');
+            rect.setAttribute('fill', color);
+            rect.setAttribute('stroke', '#2c3e50');
+            rect.setAttribute('stroke-width', '2');
+            
+            if (isHead) {
+                rect.setAttribute('class', 'head-node');
+            } else {
+                rect.setAttribute('class', `level-${level}-node node-${value}`);
+                rect.setAttribute('data-value', value);
+                rect.setAttribute('data-level', level);
+            }
+            
+            group.appendChild(rect);
+            
+            // 节点文本
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', x);
+            text.setAttribute('y', y + 5);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('class', 'node-text');
+            text.setAttribute('fill', 'white');
+            text.setAttribute('font-size', isHead ? '16' : '18');
+            text.setAttribute('font-weight', 'bold');
+            text.textContent = isHead ? 'HEAD' : value;
+            
+            group.appendChild(text);
+            
+            // 如果不是头节点，添加层数标签
+            if (!isHead && level === 0) {
+                const levelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                levelText.setAttribute('x', x);
+                levelText.setAttribute('y', y + config.nodeHeight / 2 + 20);
+                levelText.setAttribute('text-anchor', 'middle');
+                levelText.setAttribute('fill', color);
+                levelText.setAttribute('font-size', '12');
+                levelText.textContent = `层数: ${level + 1}`;
+                group.appendChild(levelText);
+            }
+        }
+
+        // 绘制连接
+        function drawConnections(svg) {
+            const connectionsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            
+            // 绘制头节点到第一层第一个节点的连接
+            for (let level = 0; level <= skipList.currentMaxLevel; level++) {
+                if (skipList.head.forward[level]) {
+                    const fromX = 100;
+                    const fromY = config.baseY + level * config.layerHeight;
+                    const toNode = skipList.head.forward[level];
+                    const nodeIndex = skipList.nodes.indexOf(toNode);
+                    const toX = 200 + nodeIndex * config.spacingX;
+                    const toY = config.baseY + level * config.layerHeight;
+                    
+                    drawConnection(connectionsGroup, fromX, fromY, toX, toY, level, true);
+                }
+            }
+            
+            // 绘制节点之间的连接
+            for (let i = 0; i < skipList.nodes.length; i++) {
+                const node = skipList.nodes[i];
+                const fromX = 200 + i * config.spacingX;
+                
+                for (let level = 0; level <= node.level; level++) {
+                    if (node.forward[level]) {
+                        const toNode = node.forward[level];
+                        const toIndex = skipList.nodes.indexOf(toNode);
+                        const toX = 200 + toIndex * config.spacingX;
+                        const fromY = config.baseY + level * config.layerHeight;
+                        const toY = config.baseY + level * config.layerHeight;
+                        
+                        drawConnection(connectionsGroup, fromX, fromY, toX, toY, level, false);
+                    }
+                }
+            }
+            
+            svg.appendChild(connectionsGroup);
+        }
+
+        // 绘制单个连接
+        function drawConnection(group, fromX, fromY, toX, toY, level, isFromHead = false) {
+            const color = config.colors[`level${level}`] || config.colors.level0;
+            
+            // 连接线
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', fromX);
+            line.setAttribute('y1', fromY);
+            line.setAttribute('x2', toX);
+            line.setAttribute('y2', toY);
+            line.setAttribute('stroke', color);
+            line.setAttribute('stroke-width', isFromHead ? '3' : '2');
+            line.setAttribute('opacity', '0.7');
+            
+            if (level === 0) {
+                line.setAttribute('stroke-width', '3');
+            }
+            
+            group.appendChild(line);
+            
+            // 箭头
+            const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            const arrowSize = 10;
+            const arrowX = toX - arrowSize * Math.cos(angle);
+            const arrowY = toY - arrowSize * Math.sin(angle);
+            
+            const points = [
+                `${arrowX},${arrowY}`,
+                `${arrowX - arrowSize * Math.cos(angle - Math.PI/6)},${arrowY - arrowSize * Math.sin(angle - Math.PI/6)}`,
+                `${arrowX - arrowSize * Math.cos(angle + Math.PI/6)},${arrowY - arrowSize * Math.sin(angle + Math.PI/6)}`
+            ].join(' ');
+            
+            arrow.setAttribute('points', points);
+            arrow.setAttribute('fill', color);
+            arrow.setAttribute('opacity', '0.7');
+            
+            group.appendChild(arrow);
+        }
+
+        // 搜索值
+        function searchValue(value) {
+            const searchResult = skipList.search(value);
+            const infoPanel = document.getElementById('infoPanel');
+            const infoTitle = document.getElementById('infoTitle');
+            const infoContent = document.getElementById('infoContent');
+            const infoDetails = document.getElementById('infoDetails');
+            
+            if (searchResult.found) {
+                infoTitle.textContent = `搜索成功: 值 ${value}`;
+                infoContent.textContent = `在跳表中找到了值 ${value}。搜索路径展示了跳表多层索引的高效性。`;
+                
+                let detailsHtml = '<div style="margin-top: 15px;">';
+                detailsHtml += '<strong>搜索路径:</strong><ul style="margin-top: 10px; padding-left: 20px;">';
+                
+                for (const step of searchResult.path) {
+                    detailsHtml += `<li>在第${step.level}层访问节点 ${step.node.value}</li>`;
+                }
+                detailsHtml += '</ul>';
+                detailsHtml += `<p style="margin-top: 10px;">总共访问了 ${searchResult.path.length} 个节点。</p>`;
+                detailsHtml += '</div>';
+                
+                infoDetails.innerHTML = detailsHtml;
+            } else {
+                infoTitle.textContent = `搜索失败: 值 ${value}`;
+                infoContent.textContent = `在跳表中没有找到值 ${value}。搜索路径展示了跳表如何确定值不存在。`;
+                
+                let detailsHtml = '<div style="margin-top: 15px;">';
+                detailsHtml += '<strong>搜索路径:</strong><ul style="margin-top: 10px; padding-left: 20px;">';
+                
+                if (searchResult.path.length > 0) {
+                    for (const step of searchResult.path) {
+                        detailsHtml += `<li>在第${step.level}层访问节点 ${step.node.value}</li>`;
+                    }
+                    detailsHtml += '</ul>';
+                    detailsHtml += `<p style="margin-top: 10px;">搜索了 ${searchResult.path.length} 个节点后确定值不存在。</p>`;
+                } else {
+                    detailsHtml += '<li>跳表为空</li></ul>';
+                }
+                detailsHtml += '</div>';
+                
+                infoDetails.innerHTML = detailsHtml;
+            }
+            
+            infoPanel.classList.add('show');
+            
+            // 高亮搜索路径
+            highlightSearchPath(searchResult.path);
+        }
+
+        // 高亮搜索路径
+        function highlightSearchPath(path) {
+            // 先清除之前的高亮
+            clearHighlights();
+            
+            const svg = document.getElementById('skipListSvg');
+            const pathGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            pathGroup.setAttribute('class', 'search-path-group');
+            
+            // 绘制搜索路径
+            for (let i = 0; i < path.length; i++) {
+                const step = path[i];
+                const nodeIndex = skipList.nodes.indexOf(step.node);
+                const nodeX = 200 + nodeIndex * config.spacingX;
+                const nodeY = config.baseY + step.level * config.layerHeight;
+                
+                // 高亮节点
+                const nodeRect = document.querySelector(`.node-${step.node.value}`);
+                if (nodeRect) {
+                    const originalFill = nodeRect.getAttribute('fill');
+                    nodeRect.setAttribute('data-original-fill', originalFill);
+                    nodeRect.setAttribute('fill', config.colors.highlight);
+                    
+                    // 5秒后恢复原色
+                    setTimeout(() => {
+                        if (nodeRect.getAttribute('data-original-fill')) {
+                            nodeRect.setAttribute('fill', nodeRect.getAttribute('data-original-fill'));
+                        }
+                    }, 5000);
+                }
+                
+                // 绘制路径线（从上一个节点到当前节点）
+                if (i > 0) {
+                    const prevStep = path[i - 1];
+                    const prevNodeIndex = skipList.nodes.indexOf(prevStep.node);
+                    const prevX = 200 + prevNodeIndex * config.spacingX;
+                    const prevY = config.baseY + prevStep.level * config.layerHeight;
+                    
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', prevX);
+                    line.setAttribute('y1', prevY);
+                    line.setAttribute('x2', nodeX);
+                    line.setAttribute('y2', nodeY);
+                    line.setAttribute('stroke', config.colors.search);
+                    line.setAttribute('stroke-width', '4');
+                    line.setAttribute('opacity', '0.8');
+                    line.setAttribute('class', 'search-path');
+                    
+                    // 添加动画
+                    line.style.animation = 'dash 1s linear infinite';
+                    
+                    pathGroup.appendChild(line);
+                }
+            }
+            
+            svg.appendChild(pathGroup);
+            
+            // 5秒后移除路径高亮
+            setTimeout(() => {
+                const pathGroup = svg.querySelector('.search-path-group');
+                if (pathGroup) {
+                    svg.removeChild(pathGroup);
+                }
+                clearHighlights();
+            }, 5000);
+        }
+
+        // 清除所有高亮
+        function clearHighlights() {
+            const highlightedNodes = document.querySelectorAll('[data-original-fill]');
+            highlightedNodes.forEach(node => {
+                node.setAttribute('fill', node.getAttribute('data-original-fill'));
+                node.removeAttribute('data-original-fill');
+            });
+        }
+
+        // 插入随机节点
+        function insertRandomNode() {
+            const existingValues = skipList.nodes.map(node => node.value);
+            let newValue;
+            
+            // 生成一个不存在的新值
+            do {
+                newValue = Math.floor(Math.random() * 100) + 1;
+            } while (existingValues.includes(newValue));
+            
+            skipList.insert(newValue);
+            updateStats();
+            drawSkipList();
+            
+            // 显示信息面板
+            const infoPanel = document.getElementById('infoPanel');
+            const infoTitle = document.getElementById('infoTitle');
+            const infoContent = document.getElementById('infoContent');
+            const infoDetails = document.getElementById('infoDetails');
+            
+            infoTitle.textContent = `插入成功: 值 ${newValue}`;
+            infoContent.textContent = `已向跳表中插入新值 ${newValue}。新节点的层数是随机生成的。`;
+            
+            const newNode = skipList.nodes.find(node => node.value === newValue);
+            const detailsHtml = `
+                <div style="margin-top: 15px;">
+                    <p><strong>新节点信息:</strong></p>
+                    <ul style="margin-top: 10px; padding-left: 20px;">
+                        <li>值: ${newValue}</li>
+                        <li>层数: ${newNode.level + 1}</li>
+                        <li>位于第 ${skipList.nodes.indexOf(newNode) + 1} 个位置</li>
+                    </ul>
+                    <p style="margin-top: 10px;">节点出现在第 i 层的概率为 p<sup>i</sup> = ${Math.pow(skipList.probability, newNode.level).toFixed(4)}</p>
+                </div>
+            `;
+            
+            infoDetails.innerHTML = detailsHtml;
+            infoPanel.classList.add('show');
+            
+            // 高亮新插入的节点
+            setTimeout(() => {
+                const nodeRects = document.querySelectorAll(`.node-${newValue}`);
+                nodeRects.forEach(rect => {
+                    const originalFill = rect.getAttribute('fill');
+                    rect.setAttribute('data-original-fill', originalFill);
+                    rect.setAttribute('fill', config.colors.insert);
+                    
+                    // 3秒后恢复原色
+                    setTimeout(() => {
+                        if (rect.getAttribute('data-original-fill')) {
+                            rect.setAttribute('fill', rect.getAttribute('data-original-fill'));
+                        }
+                    }, 3000);
+                });
+            }, 100);
+        }
+
+        // 删除随机节点
+        function deleteRandomNode() {
+            if (skipList.nodes.length === 0) {
+                alert('跳表为空，无法删除节点');
+                return;
+            }
+            
+            const randomIndex = Math.floor(Math.random() * skipList.nodes.length);
+            const nodeToDelete = skipList.nodes[randomIndex];
+            const deletedValue = nodeToDelete.value;
+            
+            skipList.delete(deletedValue);
+            updateStats();
+            drawSkipList();
+            
+            // 显示信息面板
+            const infoPanel = document.getElementById('infoPanel');
+            const infoTitle = document.getElementById('infoTitle');
+            const infoContent = document.getElementById('infoContent');
+            const infoDetails = document.getElementById('infoDetails');
+            
+            infoTitle.textContent = `删除成功: 值 ${deletedValue}`;
+            infoContent.textContent = `已从跳表中删除值 ${deletedValue}。删除后跳表自动重新建立连接。`;
+            
+            const detailsHtml = `
+                <div style="margin-top: 15px;">
+                    <p><strong>删除前:</strong> ${skipList.length + 1} 个节点</p>
+                    <p><strong>删除后:</strong> ${skipList.length} 个节点</p>
+                    <p style="margin-top: 10px;">删除操作的时间复杂度为 O(log n)，其中 n = ${skipList.length + 1}</p>
+                </div>
+            `;
+            
+            infoDetails.innerHTML = detailsHtml;
+            infoPanel.classList.add('show');
+        }
+
+        // 显示所有连接
+        function showAllConnections() {
+            const infoPanel = document.getElementById('infoPanel');
+            const infoTitle = document.getElementById('infoTitle');
+            const infoContent = document.getElementById('infoContent');
+            const infoDetails = document.getElementById('infoDetails');
+            
+            infoTitle.textContent = '跳表连接结构';
+            infoContent.textContent = '跳表通过多层稀疏索引实现高效搜索。每层都是下一层的"快速通道"。';
+            
+            let detailsHtml = '<div style="margin-top: 15px;">';
+            detailsHtml += '<p><strong>跳表层级结构:</strong></p>';
+            detailsHtml += '<ul style="margin-top: 10px; padding-left: 20px;">';
+            
+            for (let level = skipList.currentMaxLevel; level >= 0; level--) {
+                const nodesAtLevel = skipList.nodes.filter(node => node.level >= level);
+                detailsHtml += `<li>第${level}层: ${nodesAtLevel.length} 个节点 (${(nodesAtLevel.length / skipList.length * 100).toFixed(1)}%)</li>`;
+            }
+            
+            detailsHtml += '</ul>';
+            detailsHtml += `<p style="margin-top: 10px;">跳表通过这种稀疏索引结构，将搜索时间复杂度从 O(n) 降低到 O(log n)。</p>`;
+            detailsHtml += '</div>';
+            
+            infoDetails.innerHTML = detailsHtml;
+            infoPanel.classList.add('show');
+            
+            // 短暂高亮所有连接
+            const allLines = document.querySelectorAll('line');
+            allLines.forEach(line => {
+                const originalStroke = line.getAttribute('stroke');
+                const originalWidth = line.getAttribute('stroke-width');
+                const originalOpacity = line.getAttribute('opacity');
+                
+                line.setAttribute('data-original-stroke', originalStroke);
+                line.setAttribute('data-original-width', originalWidth);
+                line.setAttribute('data-original-opacity', originalOpacity);
+                
+                line.setAttribute('stroke', config.colors.search);
+                line.setAttribute('stroke-width', '4');
+                line.setAttribute('opacity', '1');
+            });
+            
+            // 3秒后恢复
+            setTimeout(() => {
+                allLines.forEach(line => {
+                    if (line.getAttribute('data-original-stroke')) {
+                        line.setAttribute('stroke', line.getAttribute('data-original-stroke'));
+                        line.setAttribute('stroke-width', line.getAttribute('data-original-width'));
+                        line.setAttribute('opacity', line.getAttribute('data-original-opacity'));
+                    }
+                });
+            }, 3000);
+        }
+
+        // 重新生成跳表
+        function regenerateSkipList() {
+            const nodeCount = parseInt(document.getElementById('nodeCountSlider').value);
+            const maxLevel = parseInt(document.getElementById('maxLevelSlider').value);
+            const probability = parseFloat(document.getElementById('probabilitySlider').value);
+            
+            skipList = new SkipList(maxLevel, probability);
+            skipList.initializeWithRandomValues(nodeCount);
+            
+            updateStats();
+            drawSkipList();
+            updateProbabilityDisplay();
+            
+            // 显示信息面板
+            const infoPanel = document.getElementById('infoPanel');
+            const infoTitle = document.getElementById('infoTitle');
+            const infoContent = document.getElementById('infoContent');
+            const infoDetails = document.getElementById('infoDetails');
+            
+            infoTitle.textContent = '跳表已重新生成';
+            infoContent.textContent = `已创建包含 ${nodeCount} 个节点的新跳表，最大层数为 ${maxLevel}，抽样概率为 ${probability}。`;
+            
+            const distribution = skipList.getLevelDistribution();
+            let detailsHtml = '<div style="margin-top: 15px;">';
+            detailsHtml += '<p><strong>层级分布:</strong></p>';
+            detailsHtml += '<ul style="margin-top: 10px; padding-left: 20px;">';
+            
+            for (let i = 0; i < distribution.length; i++) {
+                if (distribution[i] > 0) {
+                    detailsHtml += `<li>第${i}层: ${distribution[i]} 个节点</li>`;
+                }
+            }
+            
+            detailsHtml += '</ul>';
+            detailsHtml += `<p style="margin-top: 10px;">平均层数: ${(skipList.nodes.reduce((sum, node) => sum + node.level + 1, 0) / skipList.length).toFixed(2)}</p>`;
+            detailsHtml += '</div>';
+            
+            infoDetails.innerHTML = detailsHtml;
+            infoPanel.classList.add('show');
+        }
+
+        // 隐藏信息面板
+        function hideInfoPanel() {
+            document.getElementById('infoPanel').classList.remove('show');
+        }
+
+        // 初始化滑块事件监听
+        function initializeSliders() {
+            const nodeCountSlider = document.getElementById('nodeCountSlider');
+            const maxLevelSlider = document.getElementById('maxLevelSlider');
+            const probabilitySlider = document.getElementById('probabilitySlider');
+            
+            nodeCountSlider.addEventListener('input', function() {
+                document.getElementById('nodeCountValue').textContent = this.value;
+            });
+            
+            maxLevelSlider.addEventListener('input', function() {
+                document.getElementById('maxLevelValue').textContent = this.value;
+            });
+            
+            probabilitySlider.addEventListener('input', function() {
+                document.getElementById('probabilityValue').textContent = this.value;
+            });
+            
+            // 添加滑块改变事件（当用户释放滑块时重新生成跳表）
+            nodeCountSlider.addEventListener('change', regenerateSkipList);
+            maxLevelSlider.addEventListener('change', regenerateSkipList);
+            probabilitySlider.addEventListener('change', regenerateSkipList);
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSkipList();
+            initializeSliders();
+            
+            // 添加键盘快捷键
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'r' || event.key === 'R') {
+                    regenerateSkipList();
+                } else if (event.key === 'i' || event.key === 'I') {
+                    insertRandomNode();
+                } else if (event.key === 'd' || event.key === 'D') {
+                    deleteRandomNode();
+                } else if (event.key === 'Escape') {
+                    hideInfoPanel();
+                }
+            });
+            
+            // 显示欢迎信息
+            setTimeout(() => {
+                const infoPanel = document.getElementById('infoPanel');
+                const infoTitle = document.getElementById('infoTitle');
+                const infoContent = document.getElementById('infoContent');
+                const infoDetails = document.getElementById('infoDetails');
+                
+                infoTitle.textContent = 'Redis 跳表可视化';
+                infoContent.textContent = '这是一个交互式跳表可视化工具，展示了Redis有序集合(ZSET)底层数据结构的工作原理。';
+                
+                const detailsHtml = `
+                    <div style="margin-top: 15px;">
+                        <p><strong>跳表核心特性:</strong></p>
+                        <ul style="margin-top: 10px; padding-left: 20px;">
+                            <li>多层有序链表结构</li>
+                            <li>每层是下一层的"稀疏索引"</li>
+                            <li>通过随机抽样构建多层索引</li>
+                            <li>搜索/插入/删除: O(log n) 时间复杂度</li>
+                            <li>空间复杂度: O(n)</li>
+                        </ul>
+                        <p style="margin-top: 10px;"><strong>快捷键:</strong> R-重新生成, I-插入, D-删除, ESC-关闭面板</p>
+                    </div>
+                `;
+                
+                infoDetails.innerHTML = detailsHtml;
+                infoPanel.classList.add('show');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

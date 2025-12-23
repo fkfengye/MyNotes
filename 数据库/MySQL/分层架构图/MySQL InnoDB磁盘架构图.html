@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL InnoDB磁盘架构图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f9fc;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #1e5799 0%, #207cca 100%);
+            color: white;
+            padding: 25px 30px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2.4rem;
+            margin-bottom: 8px;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .diagram-container {
+            padding: 30px;
+            border-bottom: 1px solid #eaeef2;
+            min-height: 950px;
+            overflow: auto;
+        }
+        
+        .legend-container {
+            padding: 30px;
+            background-color: #f9fbfd;
+        }
+        
+        .legend-title {
+            text-align: center;
+            color: #1e5799;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eaeef2;
+            font-size: 1.8rem;
+        }
+        
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        
+        .legend-item {
+            padding: 22px;
+            border-radius: 10px;
+            background-color: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            transition: transform 0.3s, box-shadow 0.3s;
+            border-top: 5px solid #1e5799;
+            height: 100%;
+        }
+        
+        .legend-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .legend-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 5px;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        
+        .legend-item-title {
+            font-weight: 700;
+            font-size: 1.3rem;
+            color: #1e5799;
+        }
+        
+        .legend-desc {
+            font-size: 1.05rem;
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.7;
+        }
+        
+        .component-details {
+            font-size: 0.95rem;
+            color: #666;
+            padding-left: 15px;
+            border-left: 3px solid #eaeef2;
+        }
+        
+        .detail-item {
+            margin-bottom: 12px;
+            padding-left: 10px;
+        }
+        
+        .detail-item strong {
+            color: #1e5799;
+        }
+        
+        footer {
+            padding: 25px;
+            text-align: center;
+            color: #666;
+            border-top: 1px solid #eaeef2;
+            font-size: 0.95rem;
+            background-color: #f0f5fa;
+        }
+        
+        .highlight {
+            background-color: rgba(255, 255, 0, 0.2);
+            transition: background-color 0.3s;
+        }
+        
+        .component-text {
+            font-size: 14px;
+            font-weight: 600;
+            fill: #333;
+            pointer-events: none;
+        }
+        
+        .connector {
+            stroke: #888;
+            stroke-width: 2;
+            fill: none;
+            stroke-dasharray: 5,5;
+        }
+        
+        .arrow {
+            fill: #888;
+        }
+        
+        .interaction-hint {
+            text-align: center;
+            margin-top: 15px;
+            color: #666;
+            font-style: italic;
+            font-size: 0.95rem;
+        }
+        
+        @media (max-width: 1200px) {
+            .legend-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .diagram-container {
+                min-height: 800px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .subtitle {
+                font-size: 1rem;
+            }
+            
+            .legend-item {
+                padding: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MySQL InnoDB磁盘架构图</h1>
+            <p class="subtitle">展示了InnoDB存储引擎的磁盘存储结构、关键组件及其交互关系</p>
+        </header>
+        
+        <div class="diagram-container">
+            <svg id="innodb-diagram" width="100%" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+                <!-- 背景 -->
+                <rect width="100%" height="100%" fill="#f5f9fc" />
+                
+                <!-- 主标题 -->
+                <text x="800" y="50" text-anchor="middle" font-size="28" font-weight="bold" fill="#1e5799">InnoDB磁盘架构</text>
+                
+                <!-- ========== 表空间区域 ========== -->
+                <rect x="50" y="80" width="1500" height="50" fill="#1e5799" rx="8" />
+                <text x="800" y="115" text-anchor="middle" font-size="22" fill="white">表空间 (Tablespaces)</text>
+                
+                <!-- 系统表空间 -->
+                <g id="system-tablespace" class="component">
+                    <rect x="100" y="140" width="330" height="130" rx="10" fill="#4a9ae9" stroke="#2a7ac9" stroke-width="2" />
+                    <text x="265" y="175" class="component-text" fill="white" text-anchor="middle">系统表空间</text>
+                    <text x="265" y="205" class="component-text" fill="white" font-size="14" text-anchor="middle">(ibdata1)</text>
+                    <rect x="115" y="220" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="265" y="238" class="component-text" fill="white" font-size="12" text-anchor="middle">元数据</text>
+                    <rect x="115" y="250" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="265" y="268" class="component-text" fill="white" font-size="12" text-anchor="middle">Undo Log</text>
+                    <rect x="115" y="280" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="265" y="298" class="component-text" fill="white" font-size="12" text-anchor="middle">Double Write Buffer</text>
+                </g>
+                
+                <!-- 独立表空间 -->
+                <g id="file-per-table" class="component">
+                    <rect x="450" y="140" width="330" height="130" rx="10" fill="#4a9ae9" stroke="#2a7ac9" stroke-width="2" />
+                    <text x="615" y="175" class="component-text" fill="white" text-anchor="middle">独立表空间</text>
+                    <text x="615" y="205" class="component-text" fill="white" font-size="14" text-anchor="middle">(*.ibd files)</text>
+                    <rect x="465" y="220" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="615" y="238" class="component-text" fill="white" font-size="12" text-anchor="middle">表数据 (Data)</text>
+                    <rect x="465" y="250" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="615" y="268" class="component-text" fill="white" font-size="12" text-anchor="middle">索引 (Indexes)</text>
+                    <rect x="465" y="280" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="615" y="298" class="component-text" fill="white" font-size="12" text-anchor="middle">innodb_file_per_table=1</text>
+                </g>
+                
+                <!-- 临时表空间 -->
+                <g id="temp-tablespace" class="component">
+                    <rect x="800" y="140" width="330" height="130" rx="10" fill="#4a9ae9" stroke="#2a7ac9" stroke-width="2" />
+                    <text x="965" y="175" class="component-text" fill="white" text-anchor="middle">临时表空间</text>
+                    <text x="965" y="205" class="component-text" fill="white" font-size="14" text-anchor="middle">(ibtmp1)</text>
+                    <rect x="815" y="220" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="965" y="238" class="component-text" fill="white" font-size="12" text-anchor="middle">存储临时表数据</text>
+                    <rect x="815" y="250" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="965" y="268" class="component-text" fill="white" font-size="12" text-anchor="middle">重启自动清空</text>
+                </g>
+                
+                <!-- 通用表空间 -->
+                <g id="general-tablespace" class="component">
+                    <rect x="1150" y="140" width="330" height="130" rx="10" fill="#4a9ae9" stroke="#2a7ac9" stroke-width="2" />
+                    <text x="1315" y="175" class="component-text" fill="white" text-anchor="middle">通用表空间</text>
+                    <rect x="1165" y="220" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="1315" y="238" class="component-text" fill="white" font-size="12" text-anchor="middle">手动创建</text>
+                    <rect x="1165" y="250" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="1315" y="268" class="component-text" fill="white" font-size="12" text-anchor="middle">可存放多张表</text>
+                    <rect x="1165" y="280" width="300" height="25" rx="4" fill="#6bb2f0" />
+                    <text x="1315" y="298" class="component-text" fill="white" font-size="12" text-anchor="middle">兼顾管理性和灵活性</text>
+                </g>
+                
+                <!-- ========== Redo Log 区域 ========== -->
+                <rect x="50" y="310" width="1500" height="50" fill="#e67e22" rx="8" />
+                <text x="800" y="345" text-anchor="middle" font-size="22" fill="white">Redo Log (重做日志)</text>
+                
+                <!-- Redo Log 文件 -->
+                <g id="redo-log" class="component">
+                    <rect x="100" y="370" width="1400" height="100" rx="10" fill="#f39c12" stroke="#d68910" stroke-width="2" />
+                    <text x="800" y="410" class="component-text" fill="white" text-anchor="middle" font-size="18">Redo Log 文件组</text>
+                    <text x="800" y="435" class="component-text" fill="white" font-size="15" text-anchor="middle">(ib_logfile0, ib_logfile1, ...)</text>
+                    
+                    <!-- 循环写入指示 -->
+                    <circle cx="800" cy="475" r="60" fill="none" stroke="white" stroke-width="4" stroke-dasharray="5,5" />
+                    <polygon points="800,400 815,430 785,430" fill="white" />
+                    <text x="800" y="560" class="component-text" fill="white" font-size="14" text-anchor="middle">循环写入，Checkpoint标记可覆盖区域</text>
+                    
+                    <!-- Redo Log 特性 -->
+                    <g>
+                        <rect x="150" y="420" width="250" height="30" rx="5" fill="#f5b041" />
+                        <text x="275" y="440" class="component-text" fill="white" font-size="13" text-anchor="middle">物理日志</text>
+                        
+                        <rect x="450" y="420" width="250" height="30" rx="5" fill="#f5b041" />
+                        <text x="575" y="440" class="component-text" fill="white" font-size="13" text-anchor="middle">保证事务持久性</text>
+                        
+                        <rect x="750" y="420" width="250" height="30" rx="5" fill="#f5b041" />
+                        <text x="875" y="440" class="component-text" fill="white" font-size="13" text-anchor="middle">顺序写入，速度快</text>
+                        
+                        <rect x="1050" y="420" width="250" height="30" rx="5" fill="#f5b041" />
+                        <text x="1175" y="440" class="component-text" fill="white" font-size="13" text-anchor="middle">崩溃恢复</text>
+                    </g>
+                </g>
+                
+                <!-- ========== Undo Log 区域 ========== -->
+                <rect x="50" y="500" width="1500" height="50" fill="#27ae60" rx="8" />
+                <text x="800" y="535" text-anchor="middle" font-size="22" fill="white">Undo Log (回滚日志)</text>
+                
+                <!-- Undo Log 结构 -->
+                <g id="undo-log" class="component">
+                    <rect x="100" y="570" width="1400" height="100" rx="10" fill="#2ecc71" stroke="#27ae60" stroke-width="2" />
+                    <text x="800" y="610" class="component-text" fill="white" text-anchor="middle" font-size="18">Undo Log (存储在系统表空间)</text>
+                    
+                    <!-- Undo Log 特性 -->
+                    <g>
+                        <rect x="150" y="640" width="250" height="30" rx="5" fill="#58d68d" />
+                        <text x="275" y="660" class="component-text" fill="white" font-size="13" text-anchor="middle">逻辑日志</text>
+                        
+                        <rect x="450" y="640" width="250" height="30" rx="5" fill="#58d68d" />
+                        <text x="575" y="660" class="component-text" fill="white" font-size="13" text-anchor="middle">支持事务回滚</text>
+                        
+                        <rect x="750" y="640" width="250" height="30" rx="5" fill="#58d68d" />
+                        <text x="875" y="660" class="component-text" fill="white" font-size="13" text-anchor="middle">MVCC版本链</text>
+                        
+                        <rect x="1050" y="640" width="250" height="30" rx="5" fill="#58d68d" />
+                        <text x="1175" y="660" class="component-text" fill="white" font-size="13" text-anchor="middle">Purge线程清理</text>
+                    </g>
+                </g>
+                
+                <!-- ========== Double Write Buffer 区域 ========== -->
+                <rect x="50" y="700" width="1500" height="50" fill="#8e44ad" rx="8" />
+                <text x="800" y="735" text-anchor="middle" font-size="22" fill="white">Double Write Buffer (双写缓冲区)</text>
+                
+                <!-- Double Write Buffer 结构 -->
+                <g id="doublewrite" class="component">
+                    <rect x="100" y="770" width="650" height="70" rx="10" fill="#9b59b6" stroke="#8e44ad" stroke-width="2" />
+                    <text x="425" y="810" class="component-text" fill="white" text-anchor="middle" font-size="16">双写缓冲区 (在系统表空间中)</text>
+                    
+                    <!-- 数据文件 -->
+                    <rect x="850" y="770" width="650" height="70" rx="10" fill="#9b59b6" stroke="#8e44ad" stroke-width="2" />
+                    <text x="1175" y="810" class="component-text" fill="white" text-anchor="middle" font-size="16">数据文件 (*.ibd)</text>
+                    
+                    <!-- 箭头 -->
+                    <path d="M 750 805 L 850 805" stroke="#8e44ad" stroke-width="4" fill="none" marker-end="url(#arrow)" />
+                    <text x="800" y="795" class="component-text" fill="#8e44ad" font-size="14" text-anchor="middle">先写入</text>
+                    
+                    <path d="M 950 805 L 1050 805" stroke="#8e44ad" stroke-width="4" fill="none" marker-end="url(#arrow)" />
+                    <text x="1000" y="795" class="component-text" fill="#8e44ad" font-size="14" text-anchor="middle">后写入</text>
+                    
+                    <!-- 说明文本 -->
+                    <text x="800" y="860" class="component-text" fill="#8e44ad" font-size="14" text-anchor="middle">防止"部分写失效"，崩溃后从双写缓冲区恢复损坏的数据页</text>
+                </g>
+                
+                <!-- ========== 锁/事务信息 ========== -->
+                <g id="lock-info" class="component">
+                    <rect x="100" y="880" width="1400" height="70" rx="10" fill="#e74c3c" stroke="#c0392b" stroke-width="2" />
+                    <text x="800" y="915" class="component-text" fill="white" text-anchor="middle" font-size="18">锁/事务信息文件</text>
+                    <text x="800" y="940" class="component-text" fill="white" font-size="15" text-anchor="middle">存储行锁、事务ID(TRX_ID)、隔离级别、锁等待等元数据</text>
+                </g>
+                
+                <!-- 连接线 -->
+                <!-- 系统表空间到Undo Log -->
+                <path class="connector" d="M 265 270 Q 265 350, 265 450 Q 265 570, 350 570" />
+                
+                <!-- 系统表空间到Double Write Buffer -->
+                <path class="connector" d="M 265 310 Q 265 400, 265 550 Q 265 700, 425 770" />
+                
+                <!-- 独立表空间到数据文件 -->
+                <path class="connector" d="M 615 270 Q 615 400, 615 550 Q 615 700, 1175 770" />
+                
+                <!-- Undo Log到锁/事务信息 -->
+                <path class="connector" d="M 800 670 Q 800 750, 800 800 Q 800 870, 800 880" />
+                
+                <!-- Redo Log到数据恢复 -->
+                <path class="connector" d="M 800 470 Q 800 550, 800 600 Q 800 700, 1175 770" />
+                
+                <!-- 箭头定义 -->
+                <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#888" />
+                    </marker>
+                </defs>
+            </svg>
+            
+            <div class="interaction-hint">提示：将鼠标悬停在架构图的组件上，下方对应的说明会高亮显示</div>
+        </div>
+        
+        <div class="legend-container">
+            <h2 class="legend-title">InnoDB磁盘架构组件说明</h2>
+            
+            <div class="legend-grid">
+                <div class="legend-item">
+                    <div class="legend-header">
+                        <div class="legend-color" style="background-color: #4a9ae9;"></div>
+                        <div class="legend-item-title">表空间 (Tablespaces)</div>
+                    </div>
+                    <p class="legend-desc">InnoDB数据的"容器"，分为系统表空间、独立表空间、临时表空间和通用表空间四种类型。</p>
+                    <div class="component-details">
+                        <div class="detail-item">
+                            <strong>系统表空间 (ibdata1)</strong>: 存储元数据、Undo Log、Double Write Buffer。只增不减，删除数据后空间不释放。
+                        </div>
+                        <div class="detail-item">
+                            <strong>独立表空间 (*.ibd)</strong>: 每张表的数据和索引单独存储，推荐开启 innodb_file_per_table=1。
+                        </div>
+                        <div class="detail-item">
+                            <strong>临时表空间 (ibtmp1)</strong>: 存储临时表数据，重启自动清空。
+                        </div>
+                        <div class="detail-item">
+                            <strong>通用表空间</strong>: 手动创建，可存放多张表，兼顾管理性和灵活性。
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="legend-item">
+                    <div class="legend-header">
+                        <div class="legend-color" style="background-color: #f39c12;"></div>
+                        <div class="legend-item-title">Redo Log (重做日志)</div>
+                    </div>
+                    <p class="legend-desc">保证事务"持久性"(ACID-D)，解决"数据刷盘慢"的问题。采用物理日志记录页修改，循环写入，恢复速度快。</p>
+                    <div class="component-details">
+                        <div class="detail-item">
+                            <strong>设计目标</strong>: 保证事务持久性，解决数据刷盘慢的问题
+                        </div>
+                        <div class="detail-item">
+                            <strong>特性</strong>: 物理日志，循环写入，固定大小的文件组(ib_logfile0/1)
+                        </div>
+                        <div class="detail-item">
+                            <strong>核心价值</strong>: 事务提交时只需写Redo Log(顺序写，速度快)，无需立即刷数据页
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="legend-item">
+                    <div class="legend-header">
+                        <div class="legend-color" style="background-color: #2ecc71;"></div>
+                        <div class="legend-item-title">Undo Log (回滚日志)</div>
+                    </div>
+                    <p class="legend-desc">支持事务回滚 + MVCC多版本控制。记录修改前的数据，形成版本链。长事务会导致Undo Log膨胀。</p>
+                    <div class="component-details">
+                        <div class="detail-item">
+                            <strong>设计目标</strong>: 支持事务回滚 + MVCC多版本控制
+                        </div>
+                        <div class="detail-item">
+                            <strong>特性</strong>: 逻辑日志，版本链，由Purge线程异步清理
+                        </div>
+                        <div class="detail-item">
+                            <strong>注意</strong>: 长事务会导致Undo Log膨胀，占用大量磁盘空间
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="legend-item">
+                    <div class="legend-header">
+                        <div class="legend-color" style="background-color: #9b59b6;"></div>
+                        <div class="legend-item-title">Double Write Buffer</div>
+                    </div>
+                    <p class="legend-desc">解决"部分写失效"问题。刷数据页时先写双写缓冲区(顺序写)，再写数据文件。默认开启，牺牲少量性能换可靠性。</p>
+                    <div class="component-details">
+                        <div class="detail-item">
+                            <strong>解决的问题</strong>: "部分写失效"(刷数据页时断电导致数据损坏)
+                        </div>
+                        <div class="detail-item">
+                            <strong>原理</strong>: 刷数据页时，先写双写缓冲区，再写数据文件
+                        </div>
+                        <div class="detail-item">
+                            <strong>恢复逻辑</strong>: 崩溃后检查数据页，若损坏则从双写缓冲区读取完整页恢复
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="legend-item">
+                    <div class="legend-header">
+                        <div class="legend-color" style="background-color: #e74c3c;"></div>
+                        <div class="legend-item-title">锁/事务信息</div>
+                    </div>
+                    <p class="legend-desc">存储行锁、事务ID(TRX_ID)、隔离级别、锁等待等元数据，是InnoDB实现行锁和事务管理的基础。</p>
+                    <div class="component-details">
+                        <div class="detail-item">
+                            <strong>存储内容</strong>: 行锁信息、事务ID、隔离级别、锁等待等
+                        </div>
+                        <div class="detail-item">
+                            <strong>作用</strong>: 实现行锁和事务管理的基础
+                        </div>
+                        <div class="detail-item">
+                            <strong>位置</strong>: 通常存储在系统表空间中
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="legend-item">
+                    <div class="legend-header">
+                        <div class="legend-color" style="background-color: #888;"></div>
+                        <div class="legend-item-title">数据流与关系</div>
+                    </div>
+                    <p class="legend-desc">图中虚线箭头展示了各组件之间的数据流和依赖关系，帮助理解InnoDB内部工作机制。</p>
+                    <div class="component-details">
+                        <div class="detail-item">
+                            <strong>系统表空间</strong> 包含 Undo Log 和 Double Write Buffer
+                        </div>
+                        <div class="detail-item">
+                            <strong>Redo Log</strong> 用于数据恢复，保护数据文件
+                        </div>
+                        <div class="detail-item">
+                            <strong>Undo Log</strong> 支持事务回滚和MVCC
+                        </div>
+                        <div class="detail-item">
+                            <strong>Double Write Buffer</strong> 保护数据页完整性
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>MySQL InnoDB磁盘架构图 | 基于SVG实现 | 展示了表空间、Redo Log、Undo Log、Double Write Buffer等核心组件</p>
+            <p>设计: MySQL数据库专家 | 数据来源: InnoDB官方文档和最佳实践</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取所有组件
+            const components = document.querySelectorAll('.component');
+            const legendItems = document.querySelectorAll('.legend-item');
+            
+            // 为每个组件添加鼠标事件
+            components.forEach(component => {
+                component.addEventListener('mouseenter', function() {
+                    const componentId = this.id;
+                    
+                    // 移除所有高亮
+                    components.forEach(c => c.classList.remove('highlight'));
+                    legendItems.forEach(item => item.classList.remove('highlight'));
+                    
+                    // 高亮当前组件
+                    this.classList.add('highlight');
+                    
+                    // 高亮对应的图例项
+                    let legendToHighlight = null;
+                    
+                    switch(componentId) {
+                        case 'system-tablespace':
+                        case 'file-per-table':
+                        case 'temp-tablespace':
+                        case 'general-tablespace':
+                            legendToHighlight = legendItems[0];
+                            break;
+                        case 'redo-log':
+                            legendToHighlight = legendItems[1];
+                            break;
+                        case 'undo-log':
+                            legendToHighlight = legendItems[2];
+                            break;
+                        case 'doublewrite':
+                            legendToHighlight = legendItems[3];
+                            break;
+                        case 'lock-info':
+                            legendToHighlight = legendItems[4];
+                            break;
+                    }
+                    
+                    if (legendToHighlight) {
+                        legendToHighlight.classList.add('highlight');
+                        // 平滑滚动到图例项
+                        legendToHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+                
+                component.addEventListener('mouseleave', function() {
+                    // 延迟移除高亮，避免闪烁
+                    setTimeout(() => {
+                        if (!this.matches(':hover')) {
+                            components.forEach(c => c.classList.remove('highlight'));
+                            legendItems.forEach(item => item.classList.remove('highlight'));
+                        }
+                    }, 100);
+                });
+            });
+            
+            // 为图例项添加鼠标事件
+            legendItems.forEach(item => {
+                item.addEventListener('mouseenter', function() {
+                    // 移除所有高亮
+                    components.forEach(c => c.classList.remove('highlight'));
+                    legendItems.forEach(i => i.classList.remove('highlight'));
+                    
+                    // 高亮当前图例项
+                    this.classList.add('highlight');
+                    
+                    // 高亮对应的组件
+                    const index = Array.from(legendItems).indexOf(this);
+                    
+                    switch(index) {
+                        case 0: // 表空间
+                            document.getElementById('system-tablespace').classList.add('highlight');
+                            document.getElementById('file-per-table').classList.add('highlight');
+                            document.getElementById('temp-tablespace').classList.add('highlight');
+                            document.getElementById('general-tablespace').classList.add('highlight');
+                            break;
+                        case 1: // Redo Log
+                            document.getElementById('redo-log').classList.add('highlight');
+                            break;
+                        case 2: // Undo Log
+                            document.getElementById('undo-log').classList.add('highlight');
+                            break;
+                        case 3: // Double Write Buffer
+                            document.getElementById('doublewrite').classList.add('highlight');
+                            break;
+                        case 4: // 锁/事务信息
+                            document.getElementById('lock-info').classList.add('highlight');
+                            break;
+                        case 5: // 数据流与关系
+                            // 高亮所有连接线
+                            document.querySelectorAll('.connector').forEach(connector => {
+                                connector.style.stroke = '#ff9900';
+                                connector.style.strokeWidth = '3';
+                            });
+                            break;
+                    }
+                });
+                
+                item.addEventListener('mouseleave', function() {
+                    // 延迟移除高亮
+                    setTimeout(() => {
+                        if (!this.matches(':hover')) {
+                            components.forEach(c => c.classList.remove('highlight'));
+                            legendItems.forEach(i => i.classList.remove('highlight'));
+                            // 恢复连接线样式
+                            document.querySelectorAll('.connector').forEach(connector => {
+                                connector.style.stroke = '';
+                                connector.style.strokeWidth = '';
+                            });
+                        }
+                    }, 100);
+                });
+            });
+            
+            // 添加点击事件，使高亮保持更长时间
+            components.forEach(component => {
+                component.addEventListener('click', function() {
+                    const componentId = this.id;
+                    
+                    // 移除所有高亮
+                    components.forEach(c => c.classList.remove('highlight'));
+                    legendItems.forEach(item => item.classList.remove('highlight'));
+                    
+                    // 高亮当前组件
+                    this.classList.add('highlight');
+                    
+                    // 高亮对应的图例项
+                    let legendToHighlight = null;
+                    
+                    switch(componentId) {
+                        case 'system-tablespace':
+                        case 'file-per-table':
+                        case 'temp-tablespace':
+                        case 'general-tablespace':
+                            legendToHighlight = legendItems[0];
+                            break;
+                        case 'redo-log':
+                            legendToHighlight = legendItems[1];
+                            break;
+                        case 'undo-log':
+                            legendToHighlight = legendItems[2];
+                            break;
+                        case 'doublewrite':
+                            legendToHighlight = legendItems[3];
+                            break;
+                        case 'lock-info':
+                            legendToHighlight = legendItems[4];
+                            break;
+                    }
+                    
+                    if (legendToHighlight) {
+                        legendToHighlight.classList.add('highlight');
+                        legendToHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

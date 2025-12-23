@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL Server层深度架构图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f0f1f 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: rgba(20, 20, 30, 0.95);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+            padding: 30px;
+            border: 1px solid rgba(79, 195, 247, 0.1);
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 25px;
+            border-bottom: 1px solid rgba(79, 195, 247, 0.3);
+        }
+        
+        h1 {
+            color: #4fc3f7;
+            margin-bottom: 10px;
+            font-size: 2.8rem;
+            background: linear-gradient(90deg, #4fc3f7, #29b6f6, #0288d1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 15px rgba(79, 195, 247, 0.3);
+        }
+        
+        .subtitle {
+            color: #90caf9;
+            font-size: 1.3rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            line-height: 1.8;
+        }
+        
+        .server-description {
+            background: rgba(30, 30, 50, 0.7);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 40px;
+            border-left: 5px solid #29b6f6;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+        
+        .server-description h2 {
+            color: #4fc3f7;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .key-points {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .key-point {
+            background: rgba(40, 40, 60, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(100, 100, 255, 0.2);
+        }
+        
+        .key-point h3 {
+            color: #29b6f6;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .diagram-container {
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 40px;
+            border-radius: 12px;
+            background: rgba(15, 15, 25, 0.9);
+            padding: 20px;
+            box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.6);
+            position: relative;
+        }
+        
+        #mysql-server-architecture {
+            width: 1600px;
+            height: 1200px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: rgba(30, 30, 50, 0.8);
+            border-radius: 12px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #2962ff, #448aff);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(41, 98, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        button:hover {
+            background: linear-gradient(135deg, #1a56db, #2962ff);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(41, 98, 255, 0.4);
+        }
+        
+        button.secondary {
+            background: linear-gradient(135deg, #757575, #9e9e9e);
+        }
+        
+        button.secondary:hover {
+            background: linear-gradient(135deg, #616161, #757575);
+        }
+        
+        .highlight {
+            animation: highlight-pulse 1.5s ease infinite;
+            filter: drop-shadow(0 0 8px rgba(255, 235, 59, 0.8));
+        }
+        
+        @keyframes highlight-pulse {
+            0% { filter: drop-shadow(0 0 5px rgba(255, 235, 59, 0.7)); }
+            50% { filter: drop-shadow(0 0 15px rgba(255, 235, 59, 0.9)); }
+            100% { filter: drop-shadow(0 0 5px rgba(255, 235, 59, 0.7)); }
+        }
+        
+        .flow-animation {
+            animation: flow-dash 2s linear infinite;
+            stroke-dasharray: 10;
+        }
+        
+        @keyframes flow-dash {
+            to {
+                stroke-dashoffset: 100;
+            }
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(15, 15, 25, 0.98);
+            color: #e0e0e0;
+            padding: 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 500px;
+            display: none;
+            border: 1px solid rgba(100, 100, 255, 0.3);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
+            line-height: 1.7;
+        }
+        
+        .tooltip h3 {
+            color: #4fc3f7;
+            margin-bottom: 10px;
+            font-size: 18px;
+            border-bottom: 1px solid rgba(79, 195, 247, 0.3);
+            padding-bottom: 5px;
+        }
+        
+        .tooltip h4 {
+            color: #90caf9;
+            margin: 15px 0 8px 0;
+            font-size: 16px;
+        }
+        
+        .tooltip p {
+            margin-bottom: 12px;
+        }
+        
+        .tooltip ul {
+            padding-left: 20px;
+            margin-bottom: 12px;
+        }
+        
+        .tooltip li {
+            margin-bottom: 6px;
+        }
+        
+        .tooltip .code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #ffcc80;
+        }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(30, 30, 50, 0.8);
+            border-radius: 12px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 4px;
+        }
+        
+        .component-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+        
+        .component-detail {
+            background: rgba(30, 30, 50, 0.8);
+            border-radius: 12px;
+            padding: 25px;
+            border-top: 4px solid;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        
+        .component-detail h3 {
+            color: #e0e0e0;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        }
+        
+        .component-subsection {
+            margin-bottom: 20px;
+        }
+        
+        .component-subsection h4 {
+            color: #90caf9;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .component-subsection ul {
+            padding-left: 20px;
+        }
+        
+        .component-subsection li {
+            margin-bottom: 8px;
+            color: #b0bec5;
+        }
+        
+        .interaction-flow {
+            background: rgba(30, 30, 50, 0.8);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 40px;
+            border-left: 5px solid #66bb6a;
+        }
+        
+        .interaction-flow h2 {
+            color: #66bb6a;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .flow-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .flow-step {
+            background: rgba(40, 40, 60, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(102, 187, 106, 0.2);
+            position: relative;
+        }
+        
+        .flow-step-number {
+            position: absolute;
+            top: -15px;
+            left: -15px;
+            width: 30px;
+            height: 30px;
+            background: #66bb6a;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            color: #78909c;
+            font-size: 0.9rem;
+            padding-top: 25px;
+            border-top: 1px solid rgba(100, 100, 255, 0.2);
+        }
+        
+        .icon {
+            margin-right: 8px;
+            font-size: 1.2rem;
+        }
+        
+        @media (max-width: 1200px) {
+            .container {
+                padding: 20px;
+            }
+            
+            #mysql-server-architecture {
+                width: 1300px;
+                height: 1000px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            button {
+                width: 100%;
+                max-width: 350px;
+                justify-content: center;
+            }
+            
+            .component-details {
+                grid-template-columns: 1fr;
+            }
+            
+            .flow-steps {
+                grid-template-columns: 1fr;
+            }
+            
+            .key-points {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MySQL Server层深度架构图</h1>
+            <p class="subtitle">SQL处理的"大脑" • 核心调度层 • "SQL到InnoDB操作"的转换器</p>
+        </header>
+        
+        <div class="server-description">
+            <h2><i class="fas fa-brain"></i> MySQL Server层核心定位</h2>
+            <p>所有存储引擎通用的逻辑层，是"SQL到InnoDB操作"的转换器，核心解决"怎么处理SQL"，而非"怎么存数据"。</p>
+            
+            <div class="key-points">
+                <div class="key-point">
+                    <h3><i class="fas fa-exchange-alt"></i> 引擎无关性</h3>
+                    <p>通过统一的存储引擎API接口，支持多种存储引擎，实现SQL处理与数据存储的解耦。</p>
+                </div>
+                <div class="key-point">
+                    <h3><i class="fas fa-bolt"></i> SQL优化核心</h3>
+                    <p>基于成本的优化器(CBO)分析SQL，生成最优执行计划，依赖存储引擎提供的统计信息。</p>
+                </div>
+                <div class="key-point">
+                    <h3><i class="fas fa-cogs"></i> 事务协调器</h3>
+                    <p>协调Binlog与存储引擎事务日志，通过两阶段提交保证数据一致性。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="highlight-sql-flow"><i class="fas fa-code"></i>SQL处理流程</button>
+            <button id="highlight-parser"><i class="fas fa-code-branch"></i>解析器详细流程</button>
+            <button id="highlight-optimizer"><i class="fas fa-chart-line"></i>优化器工作原理</button>
+            <button id="highlight-executor"><i class="fas fa-cogs"></i>执行器与引擎交互</button>
+            <button id="highlight-binlog"><i class="fas fa-file-alt"></i>Binlog与2PC机制</button>
+            <button id="show-full-flow"><i class="fas fa-project-diagram"></i>显示完整数据流</button>
+            <button id="reset-highlight" class="secondary"><i class="fas fa-redo"></i>重置视图</button>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ff7043;"></div>
+                <span>SQL接口层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #29b6f6;"></div>
+                <span>解析器</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #66bb6a;"></div>
+                <span>优化器</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ffb74d;"></div>
+                <span>执行器</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ba68c8;"></div>
+                <span>元数据缓存</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #4db6ac;"></div>
+                <span>Binlog模块</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #78909c;"></div>
+                <span>存储引擎API</span>
+            </div>
+        </div>
+        
+        <div class="diagram-container">
+            <svg id="mysql-server-architecture" viewBox="0 0 1600 1200" xmlns="http://www.w3.org/2000/svg">
+                <!-- 定义渐变和滤镜 -->
+                <defs>
+                    <!-- SQL接口渐变 -->
+                    <linearGradient id="sqlInterfaceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#ff7043" stop-opacity="0.9" />
+                        <stop offset="100%" stop-color="#ff7043" stop-opacity="0.5" />
+                    </linearGradient>
+                    
+                    <!-- 解析器渐变 -->
+                    <linearGradient id="parserGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#29b6f6" stop-opacity="0.9" />
+                        <stop offset="100%" stop-color="#29b6f6" stop-opacity="0.5" />
+                    </linearGradient>
+                    
+                    <!-- 优化器渐变 -->
+                    <linearGradient id="optimizerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#66bb6a" stop-opacity="0.9" />
+                        <stop offset="100%" stop-color="#66bb6a" stop-opacity="0.5" />
+                    </linearGradient>
+                    
+                    <!-- 执行器渐变 -->
+                    <linearGradient id="executorGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#ffb74d" stop-opacity="0.9" />
+                        <stop offset="100%" stop-color="#ffb74d" stop-opacity="0.5" />
+                    </linearGradient>
+                    
+                    <!-- 元数据缓存渐变 -->
+                    <linearGradient id="metadataCacheGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#ba68c8" stop-opacity="0.9" />
+                        <stop offset="100%" stop-color="#ba68c8" stop-opacity="0.5" />
+                    </linearGradient>
+                    
+                    <!-- Binlog渐变 -->
+                    <linearGradient id="binlogGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#4db6ac" stop-opacity="0.9" />
+                        <stop offset="100%" stop-color="#4db6ac" stop-opacity="0.5" />
+                    </linearGradient>
+                    
+                    <!-- 阴影滤镜 -->
+                    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur in="SourceAlpha" stdDeviation="4" />
+                        <feOffset dx="3" dy="3" result="offsetblur" />
+                        <feComponentTransfer>
+                            <feFuncA type="linear" slope="0.3" />
+                        </feComponentTransfer>
+                        <feMerge>
+                            <feMergeNode />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                    
+                    <!-- 发光滤镜 -->
+                    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur"/>
+                            <feMergeNode in="blur"/>
+                            <feMergeNode in="blur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+                    
+                    <!-- 箭头定义 -->
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#4fc3f7"/>
+                    </marker>
+                    
+                    <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#ff7043"/>
+                    </marker>
+                    
+                    <marker id="arrowhead-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#29b6f6"/>
+                    </marker>
+                    
+                    <marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#66bb6a"/>
+                    </marker>
+                    
+                    <marker id="arrowhead-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#ffb74d"/>
+                    </marker>
+                </defs>
+                
+                <!-- 架构标题 -->
+                <text x="800" y="50" text-anchor="middle" font-size="32" font-weight="bold" fill="#4fc3f7">MySQL Server层深度架构图</text>
+                <text x="800" y="85" text-anchor="middle" font-size="18" fill="#90caf9">SQL处理的"大脑" - 核心调度层</text>
+                
+                <!-- 整体架构边框 -->
+                <rect x="50" y="120" width="1500" height="1000" rx="10" ry="10" fill="rgba(30, 30, 50, 0.5)" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="800" y="150" text-anchor="middle" font-size="26" font-weight="bold" fill="#4fc3f7">MySQL Server Layer (服务层)</text>
+                
+                <!-- ========== 连接层入口 ========== -->
+                <rect x="100" y="180" width="1400" height="80" rx="8" ry="8" fill="#ff7043" stroke="#e64a19" stroke-width="2" filter="url(#shadow)"/>
+                <text x="800" y="225" text-anchor="middle" font-size="22" font-weight="bold" fill="white">连接层入口 (Client Connections)</text>
+                <text x="800" y="250" text-anchor="middle" font-size="16" fill="white" font-style="italic">接收客户端SQL请求，建立会话连接</text>
+                
+                <!-- ========== 1. SQL接口层 ========== -->
+                <rect id="sql-interface-container" x="100" y="290" width="450" height="350" rx="8" ry="8" fill="url(#sqlInterfaceGradient)" stroke="#ff7043" stroke-width="2" filter="url(#shadow)"/>
+                <text x="325" y="330" text-anchor="middle" font-size="24" font-weight="bold" fill="white">SQL接口层</text>
+                <text x="325" y="360" text-anchor="middle" font-size="18" fill="white" font-style="italic">接收SQL，统一封装为引擎无关指令</text>
+                
+                <!-- SQL接口内部组件 -->
+                <g id="sql-interface-internal">
+                    <!-- DML处理器 -->
+                    <rect id="dml-handler" x="130" y="390" width="390" height="70" rx="6" ry="6" fill="#ff7043" stroke="#e64a19" stroke-width="1.5"/>
+                    <text x="325" y="430" text-anchor="middle" font-size="18" font-weight="bold" fill="white">DML处理器</text>
+                    <text x="325" y="455" text-anchor="middle" font-size="14" fill="white">INSERT/UPDATE/DELETE处理</text>
+                    
+                    <!-- DDL处理器 -->
+                    <rect id="ddl-handler" x="130" y="470" width="390" height="70" rx="6" ry="6" fill="#ff7043" stroke="#e64a19" stroke-width="1.5"/>
+                    <text x="325" y="510" text-anchor="middle" font-size="18" font-weight="bold" fill="white">DDL处理器</text>
+                    <text x="325" y="535" text-anchor="middle" font-size="14" fill="white">CREATE/ALTER/DROP处理</text>
+                    
+                    <!-- DQL处理器 -->
+                    <rect id="dql-handler" x="130" y="550" width="390" height="70" rx="6" ry="6" fill="#ff7043" stroke="#e64a19" stroke-width="1.5"/>
+                    <text x="325" y="590" text-anchor="middle" font-size="18" font-weight="bold" fill="white">DQL处理器</text>
+                    <text x="325" y="615" text-anchor="middle" font-size="14" fill="white">SELECT查询处理</text>
+                    
+                    <!-- 指令封装器 -->
+                    <rect x="130" y="630" width="390" height="80" rx="6" ry="6" fill="#ff8a65" stroke="#e64a19" stroke-width="1.5"/>
+                    <text x="325" y="670" text-anchor="middle" font-size="16" font-weight="bold" fill="white">指令封装器</text>
+                    <text x="325" y="690" text-anchor="middle" font-size="12" fill="white">SQL → 引擎无关操作指令</text>
+                </g>
+                
+                <!-- ========== 2. 解析器 ========== -->
+                <rect id="parser-container" x="600" y="290" width="450" height="350" rx="8" ry="8" fill="url(#parserGradient)" stroke="#29b6f6" stroke-width="2" filter="url(#shadow)"/>
+                <text x="825" y="330" text-anchor="middle" font-size="24" font-weight="bold" fill="white">解析器 (Parser)</text>
+                <text x="825" y="360" text-anchor="middle" font-size="18" fill="white" font-style="italic">词法分析 + 语法分析 → AST</text>
+                
+                <!-- 解析器内部组件 -->
+                <g id="parser-internal">
+                    <!-- 词法分析器 -->
+                    <rect id="lexer" x="630" y="390" width="390" height="100" rx="6" ry="6" fill="#29b6f6" stroke="#0288d1" stroke-width="1.5"/>
+                    <text x="825" y="430" text-anchor="middle" font-size="18" font-weight="bold" fill="white">词法分析器 (Lexer)</text>
+                    <text x="825" y="455" text-anchor="middle" font-size="14" fill="white">SQL文本 → Token序列</text>
+                    <text x="825" y="475" text-anchor="middle" font-size="12" fill="white">例: UPDATE t SET id=1 → [UPDATE, t, SET, id, =, 1]</text>
+                    
+                    <!-- 语法分析器 -->
+                    <rect id="syntax-parser" x="630" y="500" width="390" height="100" rx="6" ry="6" fill="#29b6f6" stroke="#0288d1" stroke-width="1.5"/>
+                    <text x="825" y="540" text-anchor="middle" font-size="18" font-weight="bold" fill="white">语法分析器 (Syntax Parser)</text>
+                    <text x="825" y="565" text-anchor="middle" font-size="14" fill="white">Token序列 → 抽象语法树(AST)</text>
+                    <text x="825" y="585" text-anchor="middle" font-size="12" fill="white">校验语法合法性，构建查询结构</text>
+                    
+                    <!-- 预处理器 -->
+                    <rect x="630" y="610" width="390" height="80" rx="6" ry="6" fill="#4fc3f7" stroke="#0288d1" stroke-width="1.5"/>
+                    <text x="825" y="650" text-anchor="middle" font-size="16" font-weight="bold" fill="white">预处理器</text>
+                    <text x="825" y="670" text-anchor="middle" font-size="12" fill="white">语义检查、权限验证、视图展开</text>
+                </g>
+                
+                <!-- ========== 3. 优化器 ========== -->
+                <rect id="optimizer-container" x="1100" y="290" width="400" height="350" rx="8" ry="8" fill="url(#optimizerGradient)" stroke="#66bb6a" stroke-width="2" filter="url(#shadow)"/>
+                <text x="1300" y="330" text-anchor="middle" font-size="24" font-weight="bold" fill="white">优化器 (Optimizer)</text>
+                <text x="1300" y="360" text-anchor="middle" font-size="18" fill="white" font-style="italic">CBO - 基于成本的优化器</text>
+                
+                <!-- 优化器内部组件 -->
+                <g id="optimizer-internal">
+                    <!-- 查询重写 -->
+                    <rect id="query-rewriter" x="1130" y="390" width="340" height="70" rx="6" ry="6" fill="#66bb6a" stroke="#388e3c" stroke-width="1.5"/>
+                    <text x="1300" y="430" text-anchor="middle" font-size="18" font-weight="bold" fill="white">查询重写</text>
+                    <text x="1300" y="455" text-anchor="middle" font-size="14" fill="white">简化、常量折叠、子查询优化</text>
+                    
+                    <!-- 成本计算器 -->
+                    <rect id="cost-calculator" x="1130" y="470" width="340" height="100" rx="6" ry="6" fill="#66bb6a" stroke="#388e3c" stroke-width="1.5"/>
+                    <text x="1300" y="510" text-anchor="middle" font-size="18" font-weight="bold" fill="white">成本计算器</text>
+                    <text x="1300" y="535" text-anchor="middle" font-size="14" fill="white">IO成本(磁盘读页) + CPU成本(数据处理)</text>
+                    <text x="1300" y="555" text-anchor="middle" font-size="12" fill="white">依赖InnoDB索引统计信息(Cardinality)</text>
+                    
+                    <!-- 执行计划生成 -->
+                    <rect id="execution-planner" x="1130" y="580" width="340" height="90" rx="6" ry="6" fill="#66bb6a" stroke="#388e3c" stroke-width="1.5"/>
+                    <text x="1300" y="620" text-anchor="middle" font-size="18" font-weight="bold" fill="white">执行计划生成</text>
+                    <text x="1300" y="645" text-anchor="middle" font-size="14" fill="white">主键索引 vs 二级索引</text>
+                    <text x="1300" y="665" text-anchor="middle" font-size="12" fill="white">嵌套循环 vs 哈希连接 vs 排序合并</text>
+                </g>
+                
+                <!-- ========== 4. 执行器 ========== -->
+                <rect id="executor-container" x="100" y="680" width="450" height="350" rx="8" ry="8" fill="url(#executorGradient)" stroke="#ffb74d" stroke-width="2" filter="url(#shadow)"/>
+                <text x="325" y="720" text-anchor="middle" font-size="24" font-weight="bold" fill="white">执行器 (Executor)</text>
+                <text x="325" y="750" text-anchor="middle" font-size="18" fill="white" font-style="italic">按执行计划调用存储引擎API</text>
+                
+                <!-- 执行器内部组件 -->
+                <g id="executor-internal">
+                    <!-- 存储引擎API接口 -->
+                    <rect id="storage-engine-api" x="130" y="790" width="390" height="80" rx="6" ry="6" fill="#ffb74d" stroke="#f57c00" stroke-width="1.5"/>
+                    <text x="325" y="830" text-anchor="middle" font-size="18" font-weight="bold" fill="white">存储引擎API接口</text>
+                    <text x="325" y="850" text-anchor="middle" font-size="14" fill="white">ha_innodb::read_row / ha_innodb::update_row</text>
+                    
+                    <!-- 数据过滤与计算 -->
+                    <rect id="data-filter" x="130" y="880" width="390" height="70" rx="6" ry="6" fill="#ffb74d" stroke="#f57c00" stroke-width="1.5"/>
+                    <text x="325" y="915" text-anchor="middle" font-size="16" font-weight="bold" fill="white">数据过滤与计算</text>
+                    <text x="325" y="940" text-anchor="middle" font-size="14" fill="white">WHERE条件二次校验、聚合计算</text>
+                    
+                    <!-- 锁等待处理 -->
+                    <rect id="lock-handler" x="130" y="960" width="390" height="60" rx="6" ry="6" fill="#ffb74d" stroke="#f57c00" stroke-width="1.5"/>
+                    <text x="325" y="990" text-anchor="middle" font-size="16" font-weight="bold" fill="white">锁等待处理</text>
+                    <text x="325" y="1010" text-anchor="middle" font-size="12" fill="white">处理InnoDB行锁超时(Lock wait timeout exceeded)</text>
+                </g>
+                
+                <!-- ========== 5. 元数据缓存 ========== -->
+                <rect id="metadata-cache-container" x="600" y="680" width="450" height="350" rx="8" ry="8" fill="url(#metadataCacheGradient)" stroke="#ba68c8" stroke-width="2" filter="url(#shadow)"/>
+                <text x="825" y="720" text-anchor="middle" font-size="24" font-weight="bold" fill="white">元数据缓存</text>
+                <text x="825" y="750" text-anchor="middle" font-size="18" fill="white" font-style="italic">缓存表结构、权限、字符集等元数据</text>
+                
+                <!-- 元数据缓存内部组件 -->
+                <g id="metadata-cache-internal">
+                    <!-- 表结构缓存 -->
+                    <rect id="table-cache" x="630" y="790" width="390" height="70" rx="6" ry="6" fill="#ba68c8" stroke="#8e24aa" stroke-width="1.5"/>
+                    <text x="825" y="825" text-anchor="middle" font-size="18" font-weight="bold" fill="white">表结构缓存</text>
+                    <text x="825" y="850" text-anchor="middle" font-size="14" fill="white">information_schema表信息</text>
+                    
+                    <!-- 权限缓存 -->
+                    <rect id="privilege-cache" x="630" y="870" width="390" height="70" rx="6" ry="6" fill="#ba68c8" stroke="#8e24aa" stroke-width="1.5"/>
+                    <text x="825" y="905" text-anchor="middle" font-size="18" font-weight="bold" fill="white">权限缓存</text>
+                    <text x="825" y="930" text-anchor="middle" font-size="14" fill="white">用户权限信息，避免频繁读磁盘</text>
+                    
+                    <!-- 字符集缓存 -->
+                    <rect id="charset-cache" x="630" y="950" width="390" height="70" rx="6" ry="6" fill="#ba68c8" stroke="#8e24aa" stroke-width="1.5"/>
+                    <text x="825" y="985" text-anchor="middle" font-size="18" font-weight="bold" fill="white">字符集缓存</text>
+                    <text x="825" y="1010" text-anchor="middle" font-size="14" fill="white">字符集、排序规则信息</text>
+                </g>
+                
+                <!-- ========== 6. Binlog模块 ========== -->
+                <rect id="binlog-container" x="1100" y="680" width="400" height="350" rx="8" ry="8" fill="url(#binlogGradient)" stroke="#4db6ac" stroke-width="2" filter="url(#shadow)"/>
+                <text x="1300" y="720" text-anchor="middle" font-size="24" font-weight="bold" fill="white">Binlog模块</text>
+                <text x="1300" y="750" text-anchor="middle" font-size="18" fill="white" font-style="italic">服务层的"逻辑日志"</text>
+                
+                <!-- Binlog模块内部组件 -->
+                <g id="binlog-internal">
+                    <!-- Binlog格式 -->
+                    <rect id="binlog-format" x="1130" y="790" width="340" height="80" rx="6" ry="6" fill="#4db6ac" stroke="#00897b" stroke-width="1.5"/>
+                    <text x="1300" y="830" text-anchor="middle" font-size="18" font-weight="bold" fill="white">Binlog格式</text>
+                    <text x="1300" y="855" text-anchor="middle" font-size="14" fill="white">STATEMENT / ROW(默认) / MIXED</text>
+                    
+                    <!-- 两阶段提交协调器 -->
+                    <rect id="2pc-coordinator" x="1130" y="880" width="340" height="100" rx="6" ry="6" fill="#4db6ac" stroke="#00897b" stroke-width="1.5"/>
+                    <text x="1300" y="920" text-anchor="middle" font-size="18" font-weight="bold" fill="white">两阶段提交协调器</text>
+                    <text x="1300" y="945" text-anchor="middle" font-size="14" fill="white">协调Binlog与Redo Log一致性</text>
+                    <text x="1300" y="965" text-anchor="middle" font-size="12" fill="white">Prepare阶段 → Commit阶段</text>
+                    
+                    <!-- 主从复制管理 -->
+                    <rect id="replication-manager" x="1130" y="990" width="340" height="70" rx="6" ry="6" fill="#4db6ac" stroke="#00897b" stroke-width="1.5"/>
+                    <text x="1300" y="1025" text-anchor="middle" font-size="16" font-weight="bold" fill="white">主从复制管理</text>
+                    <text x="1300" y="1045" text-anchor="middle" font-size="14" fill="white">数据同步、GTID管理</text>
+                </g>
+                
+                <!-- ========== 存储引擎API层 ========== -->
+                <rect x="100" y="1050" width="1400" height="80" rx="8" ry="8" fill="#78909c" stroke="#546e7a" stroke-width="2" filter="url(#shadow)"/>
+                <text x="800" y="1090" text-anchor="middle" font-size="22" font-weight="bold" fill="white">存储引擎API层</text>
+                <text x="800" y="1115" text-anchor="middle" font-size="16" fill="white" font-style="italic">MySQL定义的统一存储引擎接口，解耦服务层与存储引擎</text>
+                
+                <!-- 存储引擎API示例 -->
+                <g id="storage-engine-api-examples">
+                    <rect x="150" y="1130" width="300" height="40" rx="4" ry="4" fill="#90a4ae" stroke="#546e7a" stroke-width="1"/>
+                    <text x="300" y="1155" text-anchor="middle" font-size="14" fill="white">ha_innodb::write_row</text>
+                    
+                    <rect x="500" y="1130" width="300" height="40" rx="4" ry="4" fill="#90a4ae" stroke="#546e7a" stroke-width="1"/>
+                    <text x="650" y="1155" text-anchor="middle" font-size="14" fill="white">ha_innodb::update_row</text>
+                    
+                    <rect x="850" y="1130" width="300" height="40" rx="4" ry="4" fill="#90a4ae" stroke="#546e7a" stroke-width="1"/>
+                    <text x="1000" y="1155" text-anchor="middle" font-size="14" fill="white">ha_innodb::delete_row</text>
+                    
+                    <rect x="1200" y="1130" width="300" height="40" rx="4" ry="4" fill="#90a4ae" stroke="#546e7a" stroke-width="1"/>
+                    <text x="1350" y="1155" text-anchor="middle" font-size="14" fill="white">ha_innodb::index_read</text>
+                </g>
+                
+                <!-- ========== 数据流向连接线 ========== -->
+                <!-- 连接层到SQL接口 -->
+                <path class="sql-flow" d="M 800 260 L 800 290" stroke="#ff7043" stroke-width="2" marker-end="url(#arrowhead-red)" opacity="0.8"/>
+                
+                <!-- SQL接口到解析器 -->
+                <path class="sql-flow" d="M 550 445 L 600 445" stroke="#ff7043" stroke-width="2" marker-end="url(#arrowhead-blue)" opacity="0.8"/>
+                
+                <!-- 解析器到优化器 -->
+                <path class="sql-flow" d="M 1050 515 L 1100 515" stroke="#29b6f6" stroke-width="2" marker-end="url(#arrowhead-green)" opacity="0.8"/>
+                
+                <!-- 优化器到执行器 -->
+                <path class="sql-flow" d="M 1300 640 L 1250 640 L 1250 715 L 550 715" stroke="#66bb6a" stroke-width="2" marker-end="url(#arrowhead-orange)" opacity="0.8"/>
+                
+                <!-- 执行器到存储引擎API -->
+                <path class="sql-flow" d="M 325 1030 L 325 1050" stroke="#ffb74d" stroke-width="2" marker-end="url(#arrowhead)" opacity="0.8"/>
+                
+                <!-- 元数据缓存到执行器 -->
+                <path class="sql-flow" d="M 825 1030 L 825 1050" stroke="#ba68c8" stroke-width="2" marker-end="url(#arrowhead)" opacity="0.8"/>
+                
+                <!-- 执行器到Binlog模块 -->
+                <path class="sql-flow" d="M 550 915 L 600 915 L 600 790" stroke="#ffb74d" stroke-width="2" marker-end="url(#arrowhead)" opacity="0.8"/>
+                
+                <!-- Binlog模块到两阶段提交 -->
+                <path class="sql-flow" d="M 1300 1070 L 1300 1050" stroke="#4db6ac" stroke-width="2" marker-end="url(#arrowhead)" opacity="0.8"/>
+                
+                <!-- 解析器内部流程 -->
+                <path class="parser-flow" d="M 825 490 L 825 500" stroke="#29b6f6" stroke-width="1.5" marker-end="url(#arrowhead-blue)" opacity="0.7"/>
+                
+                <!-- 优化器内部流程 -->
+                <path class="optimizer-flow" d="M 1300 460 L 1300 470" stroke="#66bb6a" stroke-width="1.5" marker-end="url(#arrowhead-green)" opacity="0.7"/>
+                <path class="optimizer-flow" d="M 1300 570 L 1300 580" stroke="#66bb6a" stroke-width="1.5" marker-end="url(#arrowhead-green)" opacity="0.7"/>
+                
+                <!-- 执行器内部流程 -->
+                <path class="executor-flow" d="M 325 870 L 325 880" stroke="#ffb74d" stroke-width="1.5" marker-end="url(#arrowhead-orange)" opacity="0.7"/>
+                <path class="executor-flow" d="M 325 950 L 325 960" stroke="#ffb74d" stroke-width="1.5" marker-end="url(#arrowhead-orange)" opacity="0.7"/>
+                
+                <!-- 索引统计信息流向 -->
+                <path class="statistics-flow" d="M 1470 535 L 1520 535 L 1520 300 L 1300 300 L 1300 390" stroke="#ff9800" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)" opacity="0.7"/>
+                
+                <!-- 两阶段提交标注 -->
+                <rect x="600" y="1150" width="400" height="50" rx="6" ry="6" fill="rgba(255, 112, 67, 0.2)" stroke="#ff7043" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="800" y="1180" text-anchor="middle" font-size="16" font-weight="bold" fill="#ff7043">两阶段提交 (2PC)</text>
+                <text x="800" y="1195" text-anchor="middle" font-size="12" fill="#ff7043">保证Binlog与存储引擎事务日志的一致性</text>
+                
+                <!-- 关键标注：引擎无关性 -->
+                <rect x="50" y="1150" width="400" height="50" rx="6" ry="6" fill="rgba(79, 195, 247, 0.2)" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="250" y="1180" text-anchor="middle" font-size="16" font-weight="bold" fill="#4fc3f7">引擎无关性</text>
+                <text x="250" y="1195" text-anchor="middle" font-size="12" fill="#4fc3f7">统一的API接口，支持多种存储引擎</text>
+                
+                <!-- 关键标注：索引统计 -->
+                <rect x="1150" y="1150" width="350" height="50" rx="6" ry="6" fill="rgba(102, 187, 106, 0.2)" stroke="#66bb6a" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="1325" y="1180" text-anchor="middle" font-size="16" font-weight="bold" fill="#66bb6a">索引统计信息</text>
+                <text x="1325" y="1195" text-anchor="middle" font-size="12" fill="#66bb6a">来自存储引擎(Cardinality)，影响优化器决策</text>
+            </svg>
+        </div>
+        
+        <div class="component-details">
+            <div class="component-detail" style="border-color: #ff7043;">
+                <h3><i class="fas fa-code"></i> SQL接口层深度解析</h3>
+                
+                <div class="component-subsection">
+                    <h4>核心功能</h4>
+                    <ul>
+                        <li><strong>SQL分类处理</strong>: 识别并分发DML、DDL、DQL、DCL语句</li>
+                        <li><strong>指令封装</strong>: 将SQL转换为引擎无关的操作指令</li>
+                        <li><strong>连接管理</strong>: 管理与客户端的会话连接</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>工作示例</h4>
+                    <ul>
+                        <li><strong>INSERT语句</strong>: 转换为"请求InnoDB插入行 + 加锁 + 记录日志"指令</li>
+                        <li><strong>SELECT语句</strong>: 转换为"读取id=1的行"的查询指令</li>
+                        <li><strong>UPDATE语句</strong>: 转换为"修改行 + 记录undo日志 + 记录redo日志"指令</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>与解析器交互</h4>
+                    <ul>
+                        <li>接收客户端原始SQL语句</li>
+                        <li>进行初步分类和验证</li>
+                        <li>转发给解析器进行词法和语法分析</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="component-detail" style="border-color: #29b6f6;">
+                <h3><i class="fas fa-code-branch"></i> 解析器深度解析</h3>
+                
+                <div class="component-subsection">
+                    <h4>词法分析 (Lexer)</h4>
+                    <ul>
+                        <li><strong>输入</strong>: SQL文本字符串</li>
+                        <li><strong>处理</strong>: 拆分为Token序列</li>
+                        <li><strong>示例</strong>: <code>UPDATE t SET id=1</code> → [UPDATE, t, SET, id, =, 1]</li>
+                        <li><strong>功能</strong>: 识别关键字、标识符、运算符、常量等</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>语法分析 (Syntax Parser)</h4>
+                    <ul>
+                        <li><strong>输入</strong>: Token序列</li>
+                        <li><strong>处理</strong>: 构建抽象语法树(AST)</li>
+                        <li><strong>功能</strong>: 校验语法合法性，构建查询结构</li>
+                        <li><strong>错误检测</strong>: 检测InnoDB外键语法等错误</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>输出结果</h4>
+                    <ul>
+                        <li><strong>抽象语法树(AST)</strong>: 结构化的SQL表示</li>
+                        <li><strong>待执行操作树</strong>: 优化器可处理的查询结构</li>
+                        <li><strong>语义信息</strong>: 表名、列名、条件表达式等</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="component-detail" style="border-color: #66bb6a;">
+                <h3><i class="fas fa-chart-line"></i> 优化器深度解析</h3>
+                
+                <div class="component-subsection">
+                    <h4>成本优化 (CBO)</h4>
+                    <ul>
+                        <li><strong>IO成本</strong>: 从磁盘读取数据页的开销</li>
+                        <li><strong>CPU成本</strong>: 数据处理和计算的开销</li>
+                        <li><strong>内存成本</strong>: 内存使用和缓存的开销</li>
+                        <li><strong>总成本</strong>: IO成本 + CPU成本，选择最小方案</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>索引统计信息依赖</h4>
+                    <ul>
+                        <li><strong>Cardinality</strong>: 索引唯一值数量，来自InnoDB统计</li>
+                        <li><strong>数据分布</strong>: 直方图统计，了解数据分布情况</li>
+                        <li><strong>更新机制</strong>: 自动或手动更新(<code>ANALYZE TABLE</code>)</li>
+                        <li><strong>统计不准问题</strong>: 导致优化器"选错索引"，性能暴跌</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>执行计划选择</h4>
+                    <ul>
+                        <li><strong>索引选择</strong>: 主键索引 vs 二级索引 vs 全表扫描</li>
+                        <li><strong>连接算法</strong>: 嵌套循环 vs 哈希连接 vs 排序合并</li>
+                        <li><strong>子查询优化</strong>: 子查询转换为连接或半连接</li>
+                        <li><strong>查询重写</strong>: 简化表达式，常量折叠等</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="interaction-flow">
+            <h2><i class="fas fa-exchange-alt"></i> SQL处理完整流程示例</h2>
+            <p>以<code>SELECT * FROM t WHERE id=1</code>为例，展示Server层完整处理流程：</p>
+            
+            <div class="flow-steps">
+                <div class="flow-step">
+                    <div class="flow-step-number">1</div>
+                    <h4>SQL接口接收</h4>
+                    <p>连接层接收客户端SQL语句，SQL接口层识别为SELECT查询，进行初步验证和分类。</p>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="flow-step-number">2</div>
+                    <h4>解析器分析</h4>
+                    <p>词法分析拆分Token，语法分析构建AST，预处理器检查表t是否存在、用户是否有权限。</p>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="flow-step-number">3</div>
+                    <h4>优化器优化</h4>
+                    <p>查询InnoDB索引统计信息，计算IO和CPU成本，决定使用主键索引还是全表扫描。</p>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="flow-step-number">4</div>
+                    <h4>执行器执行</h4>
+                    <p>调用<code>ha_innodb::index_read</code>，请求InnoDB根据主键id=1查找行数据。</p>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="flow-step-number">5</div>
+                    <h4>数据返回处理</h4>
+                    <p>InnoDB返回数据后，执行器进行WHERE条件二次校验，将结果返回给客户端。</p>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="flow-step-number">6</div>
+                    <h4>锁等待处理</h4>
+                    <p>如果该行被其他事务锁定，执行器处理锁等待，超时返回<code>Lock wait timeout exceeded</code>错误。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="component-details">
+            <div class="component-detail" style="border-color: #ffb74d;">
+                <h3><i class="fas fa-cogs"></i> 执行器深度解析</h3>
+                
+                <div class="component-subsection">
+                    <h4>存储引擎API调用</h4>
+                    <ul>
+                        <li><strong>统一接口</strong>: MySQL定义的ha_*系列API接口</li>
+                        <li><strong>示例接口</strong>: <code>ha_innodb::read_row</code>, <code>ha_innodb::update_row</code></li>
+                        <li><strong>引擎无关</strong>: 相同接口可调用不同存储引擎</li>
+                        <li><strong>参数传递</strong>: 传递表句柄、索引信息、查询条件等</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>数据后处理</h4>
+                    <ul>
+                        <li><strong>WHERE条件过滤</strong>: 对存储引擎返回的数据进行二次校验</li>
+                        <li><strong>聚合计算</strong>: GROUP BY, SUM, COUNT等聚合操作</li>
+                        <li><strong>排序和限制</strong>: ORDER BY, LIMIT处理</li>
+                        <li><strong>结果集构建</strong>: 构建返回给客户端的最终结果集</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>事务和锁管理</h4>
+                    <ul>
+                        <li><strong>锁等待处理</strong>: 监控InnoDB行锁等待，处理超时</li>
+                        <li><strong>事务状态管理</strong>: 跟踪事务开始、提交、回滚状态</li>
+                        <li><strong>错误处理</strong>: 捕获并处理存储引擎返回的错误</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="component-detail" style="border-color: #ba68c8;">
+                <h3><i class="fas fa-database"></i> 元数据缓存深度解析</h3>
+                
+                <div class="component-subsection">
+                    <h4>缓存内容</h4>
+                    <ul>
+                        <li><strong>表结构信息</strong>: 表名、列名、数据类型、索引定义</li>
+                        <li><strong>权限信息</strong>: 用户权限、数据库权限、表权限</li>
+                        <li><strong>字符集信息</strong>: 字符集、排序规则、转换规则</li>
+                        <li><strong>存储引擎信息</strong>: 表使用的存储引擎类型和特性</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>缓存优势</h4>
+                    <ul>
+                        <li><strong>减少磁盘IO</strong>: 避免频繁读取系统表</li>
+                        <li><strong>提升解析速度</strong>: 快速获取表结构信息</li>
+                        <li><strong>权限检查加速</strong>: 快速验证用户权限</li>
+                        <li><strong>支持DDL操作</strong>: 缓存DDL操作后的新表结构</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>缓存失效</h4>
+                    <ul>
+                        <li><strong>DDL操作</strong>: ALTER TABLE等操作使缓存失效</li>
+                        <li><strong>权限变更</strong>: GRANT/REVOKE使权限缓存失效</li>
+                        <li><strong>手动刷新</strong>: <code>FLUSH TABLES</code>, <code>FLUSH PRIVILEGES</code></li>
+                        <li><strong>自动刷新</strong>: 缓存超时或内存不足时自动刷新</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="component-detail" style="border-color: #4db6ac;">
+                <h3><i class="fas fa-file-alt"></i> Binlog模块深度解析</h3>
+                
+                <div class="component-subsection">
+                    <h4>Binlog格式</h4>
+                    <ul>
+                        <li><strong>STATEMENT</strong>: 记录SQL语句，数据量小但可能主从不一致</li>
+                        <li><strong>ROW</strong>: 记录行变更(默认)，安全但数据量大</li>
+                        <li><strong>MIXED</strong>: 混合模式，根据SQL自动选择格式</li>
+                        <li><strong>格式选择</strong>: <code>binlog_format</code>参数控制</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>两阶段提交(2PC)</h4>
+                    <ul>
+                        <li><strong>Prepare阶段</strong>: InnoDB写redo log并标记为prepare状态</li>
+                        <li><strong>Commit阶段</strong>: Server写binlog，InnoDB标记redo log为commit</li>
+                        <li><strong>崩溃恢复</strong>: 检查prepare的redo log，对应binlog完整则提交</li>
+                        <li><strong>一致性保证</strong>: 确保binlog和redo log要么都提交，要么都回滚</li>
+                    </ul>
+                </div>
+                
+                <div class="component-subsection">
+                    <h4>主从复制</h4>
+                    <ul>
+                        <li><strong>复制原理</strong>: Master写binlog，Slave读取并重放</li>
+                        <li><strong>GTID</strong>: 全局事务ID，保证主从数据一致性</li>
+                        <li><strong>复制模式</strong>: 异步复制、半同步复制、组复制</li>
+                        <li><strong>数据恢复</strong>: 使用binlog进行时间点恢复</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>MySQL Server层深度架构图 | SQL处理的"大脑" • 引擎无关的核心调度层</p>
+            <p>© 2023 MySQL内核深度解析 | 基于MySQL 8.0.30架构</p>
+        </footer>
+    </div>
+    
+    <div class="tooltip" id="tooltip"></div>
+    
+    <script>
+        // 获取SVG元素和工具提示
+        const svg = document.getElementById('mysql-server-architecture');
+        const tooltip = document.getElementById('tooltip');
+        
+        // Server层组件详细信息配置
+        const serverComponents = [
+            // SQL接口层组件
+            { id: 'sql-interface-container', name: 'SQL接口层', desc: '接收客户端SQL请求，统一封装为存储引擎无关的操作指令。', details: '<h4>核心功能：</h4><ul><li>SQL语句分类：DML、DDL、DQL、DCL</li><li>指令封装：将SQL转换为引擎无关的操作指令</li><li>连接管理：管理客户端连接和会话状态</li><li>错误处理：处理SQL语法外的其他错误</li></ul>' },
+            
+            { id: 'dml-handler', name: 'DML处理器', desc: '处理INSERT、UPDATE、DELETE等数据操作语句。', details: '<h4>处理流程：</h4><ul><li>验证表存在性和权限</li><li>转换为对应的数据操作指令</li><li>处理自增ID、默认值等</li><li>调用解析器进行语法分析</li></ul>' },
+            
+            { id: 'ddl-handler', name: 'DDL处理器', desc: '处理CREATE、ALTER、DROP等数据定义语句。', details: '<h4>处理流程：</h4><ul><li>验证语法和权限</li><li>更新数据字典</li><li>调用存储引擎创建/修改表结构</li><li>使相关缓存失效</li></ul>' },
+            
+            { id: 'dql-handler', name: 'DQL处理器', desc: '处理SELECT等数据查询语句。', details: '<h4>处理流程：</h4><ul><li>验证查询语法</li><li>检查表和列权限</li><li>转换为查询指令</li><li>调用解析器进行语法分析</li></ul>' },
+            
+            // 解析器组件
+            { id: 'parser-container', name: '解析器 (Parser)', desc: '将SQL文本转换为结构化的抽象语法树(AST)。', details: '<h4>解析流程：</h4><ul><li>词法分析：SQL文本 → Token序列</li><li>语法分析：Token序列 → 抽象语法树(AST)</li><li>语义检查：验证表、列、权限等</li><li>预处理器：视图展开、常量计算等</li></ul>' },
+            
+            { id: 'lexer', name: '词法分析器 (Lexer)', desc: '将SQL文本拆分为Token序列，识别关键字、标识符等。', details: '<h4>工作原理：</h4><ul><li>扫描SQL文本字符流</li><li>识别关键字(SELECT, FROM等)</li><li>识别标识符(表名、列名)</li><li>识别运算符、常量、字符串等</li><li>输出Token序列供语法分析使用</li></ul>' },
+            
+            { id: 'syntax-parser', name: '语法分析器 (Syntax Parser)', desc: '根据SQL语法规则，将Token序列转换为抽象语法树(AST)。', details: '<h4>工作原理：</h4><ul><li>基于SQL语法规则进行分析</li><li>构建查询的树状结构表示</li><li>校验语法合法性</li><li>检测外键语法等InnoDB特定语法错误</li><li>输出结构化的"待执行操作树"</li></ul>' },
+            
+            // 优化器组件
+            { id: 'optimizer-container', name: '优化器 (Optimizer)', desc: '基于成本的优化器(CBO)，生成最优执行计划。', details: '<h4>优化目标：</h4><ul><li>最小化查询执行时间</li><li>最小化资源消耗(IO、CPU、内存)</li><li>选择最优访问路径</li><li>选择最优连接顺序和算法</li></ul>' },
+            
+            { id: 'query-rewriter', name: '查询重写器', desc: '对查询进行等价变换，简化和优化查询结构。', details: '<h4>重写操作：</h4><ul><li>常量折叠：1+2 → 3</li><li>表达式简化：x AND true → x</li><li>子查询转换：子查询转换为连接</li><li>视图合并：将视图展开为基表查询</li><li>谓词下推：将过滤条件尽可能下推到存储引擎</li></ul>' },
+            
+            { id: 'cost-calculator', name: '成本计算器', desc: '计算不同执行计划的IO成本和CPU成本，选择成本最低的计划。', details: '<h4>成本计算：</h4><ul><li>IO成本：从磁盘读取数据页的开销</li><li>CPU成本：数据处理和计算的开销</li><li>依赖InnoDB提供的索引统计信息(Cardinality)</li><li>统计信息不准会导致"选错索引"，性能暴跌</li><li>可通过<code>ANALYZE TABLE</code>更新统计信息</li></ul>' },
+            
+            { id: 'execution-planner', name: '执行计划生成器', desc: '基于成本计算，生成具体的执行计划。', details: '<h4>计划选择：</h4><ul><li>索引选择：主键索引 vs 二级索引 vs 全表扫描</li><li>连接算法：嵌套循环 vs 哈希连接 vs 排序合并</li><li>访问顺序：多表连接时的表访问顺序</li><li>临时表使用：是否需要创建临时表</li><li>排序策略：内存排序 vs 磁盘排序</li></ul>' },
+            
+            // 执行器组件
+            { id: 'executor-container', name: '执行器 (Executor)', desc: '按执行计划调用存储引擎API，执行查询并返回结果。', details: '<h4>核心职责：</h4><ul><li>调用存储引擎API执行数据操作</li><li>处理存储引擎返回的数据</li><li>执行WHERE条件过滤、聚合计算等</li><li>处理锁等待和事务状态</li><li>返回结果给客户端</li></ul>' },
+            
+            { id: 'storage-engine-api', name: '存储引擎API接口', desc: 'MySQL定义的统一存储引擎接口，实现服务层与存储引擎的解耦。', details: '<h4>接口示例：</h4><ul><li><code>ha_innodb::write_row</code>：插入行</li><li><code>ha_innodb::update_row</code>：更新行</li><li><code>ha_innodb::delete_row</code>：删除行</li><li><code>ha_innodb::index_read</code>：通过索引读取行</li><li><code>ha_innodb::rnd_next</code>：全表扫描下一行</li></ul>' },
+            
+            { id: 'data-filter', name: '数据过滤与计算', desc: '对存储引擎返回的数据进行二次处理，包括过滤、聚合、排序等。', details: '<h4>处理内容：</h4><ul><li>WHERE条件过滤：对返回的行进行条件判断</li><li>聚合计算：SUM、COUNT、AVG等聚合函数</li><li>排序：ORDER BY排序，可能使用内存或磁盘</li><li>分组：GROUP BY分组操作</li><li>限制：LIMIT限制返回行数</li></ul>' },
+            
+            { id: 'lock-handler', name: '锁等待处理器', desc: '处理InnoDB行锁等待，监控锁超时情况。', details: '<h4>处理机制：</h4><ul><li>监控InnoDB行锁等待时间</li><li>锁超时配置：<code>innodb_lock_wait_timeout</code></li><li>超时处理：返回<code>Lock wait timeout exceeded</code>错误</li><li>死锁检测：配合InnoDB死锁检测机制</li></ul>' },
+            
+            // 元数据缓存组件
+            { id: 'metadata-cache-container', name: '元数据缓存', desc: '缓存表结构、权限、字符集等元数据，避免频繁读取磁盘。', details: '<h4>缓存优势：</h4><ul><li>减少系统表磁盘IO</li><li>加速SQL解析和优化</li><li>快速权限验证</li><li>支持并发查询</li></ul>' },
+            
+            { id: 'table-cache', name: '表结构缓存', desc: '缓存表的定义信息，包括列、索引、存储引擎等。', details: '<h4>缓存内容：</h4><ul><li>表名和列定义</li><li>索引定义和统计信息</li><li>存储引擎类型和特性</li><li>分区信息(如果使用分区)</li><li>外键约束信息</li></ul>' },
+            
+            { id: 'privilege-cache', name: '权限缓存', desc: '缓存用户权限信息，加速权限验证。', details: '<h4>缓存内容：</h4><ul><li>用户全局权限</li><li>数据库级权限</li><li>表级权限</li><li>列级权限</li><li>存储过程和函数权限</li></ul>' },
+            
+            // Binlog组件
+            { id: 'binlog-container', name: 'Binlog模块', desc: '服务层的逻辑日志，用于主从复制和数据恢复。', details: '<h4>核心功能：</h4><ul><li>记录数据变更的逻辑日志</li><li>支持主从复制</li><li>支持时间点数据恢复</li><li>通过两阶段提交保证与存储引擎日志的一致性</li></ul>' },
+            
+            { id: 'binlog-format', name: 'Binlog格式管理器', desc: '管理Binlog的存储格式：STATEMENT、ROW、MIXED。', details: '<h4>格式比较：</h4><ul><li><strong>STATEMENT</strong>：记录SQL语句，数据量小，但可能主从不一致</li><li><strong>ROW</strong>：记录行变更，安全，但数据量大(默认)</li><li><strong>MIXED</strong>：混合模式，智能选择格式</li><li>配置参数：<code>binlog_format</code></li></ul>' },
+            
+            { id: '2pc-coordinator', name: '两阶段提交协调器', desc: '协调Binlog与存储引擎事务日志，保证数据一致性。', details: '<h4>两阶段提交流程：</h4><ul><li><strong>Prepare阶段</strong>：InnoDB写redo log，标记为prepare状态</li><li><strong>Commit阶段</strong>：Server写binlog，InnoDB标记redo log为commit状态</li><li><strong>崩溃恢复</strong>：检查prepare的redo log，如果对应binlog完整则提交，否则回滚</li><li><strong>一致性保证</strong>：确保binlog和redo log要么都提交，要么都回滚</li></ul>' },
+        ];
+        
+        // 为每个组件添加事件监听器
+        serverComponents.forEach(component => {
+            const elem = document.getElementById(component.id);
+            if (elem) {
+                // 鼠标悬停显示工具提示
+                elem.addEventListener('mouseover', (e) => {
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = `
+                        <h3>${component.name}</h3>
+                        <p>${component.desc}</p>
+                        ${component.details ? `<div style="margin-top:15px;">${component.details}</div>` : ''}
+                    `;
+                    
+                    // 高亮当前组件
+                    elem.style.filter = 'url(#glow)';
+                });
+                
+                // 鼠标移动时更新工具提示位置
+                elem.addEventListener('mousemove', (e) => {
+                    const x = e.clientX + 20;
+                    const y = e.clientY + 20;
+                    
+                    // 确保工具提示不会超出屏幕
+                    const maxX = window.innerWidth - 520;
+                    const maxY = window.innerHeight - 300;
+                    
+                    tooltip.style.left = `${Math.min(x, maxX)}px`;
+                    tooltip.style.top = `${Math.min(y, maxY)}px`;
+                });
+                
+                // 鼠标离开时隐藏工具提示
+                elem.addEventListener('mouseout', (e) => {
+                    tooltip.style.display = 'none';
+                    elem.style.filter = 'none';
+                });
+                
+                // 点击时高亮
+                elem.addEventListener('click', (e) => {
+                    // 移除所有高亮
+                    document.querySelectorAll('.highlight').forEach(el => {
+                        el.classList.remove('highlight');
+                    });
+                    
+                    // 添加高亮
+                    elem.classList.add('highlight');
+                    
+                    // 防止事件冒泡
+                    e.stopPropagation();
+                });
+            }
+        });
+        
+        // 高亮控制功能
+        document.getElementById('highlight-sql-flow').addEventListener('click', () => {
+            highlightComponents(['sql-interface-container', 'parser-container', 'optimizer-container', 'executor-container']);
+            showFlows(['sql-flow']);
+        });
+        
+        document.getElementById('highlight-parser').addEventListener('click', () => {
+            highlightComponents(['parser-container', 'lexer', 'syntax-parser']);
+            showFlows(['parser-flow']);
+        });
+        
+        document.getElementById('highlight-optimizer').addEventListener('click', () => {
+            highlightComponents(['optimizer-container', 'query-rewriter', 'cost-calculator', 'execution-planner']);
+            showFlows(['optimizer-flow', 'statistics-flow']);
+        });
+        
+        document.getElementById('highlight-executor').addEventListener('click', () => {
+            highlightComponents(['executor-container', 'storage-engine-api', 'data-filter', 'lock-handler']);
+            showFlows(['executor-flow']);
+        });
+        
+        document.getElementById('highlight-binlog').addEventListener('click', () => {
+            highlightComponents(['binlog-container', 'binlog-format', '2pc-coordinator', 'replication-manager']);
+            showFlows(['sql-flow']);
+        });
+        
+        document.getElementById('show-full-flow').addEventListener('click', () => {
+            showFlows(['sql-flow', 'parser-flow', 'optimizer-flow', 'executor-flow', 'statistics-flow']);
+        });
+        
+        document.getElementById('reset-highlight').addEventListener('click', () => {
+            resetView();
+        });
+        
+        function highlightComponents(componentIds) {
+            resetView();
+            
+            componentIds.forEach(id => {
+                const elem = document.getElementById(id);
+                if (elem) {
+                    elem.classList.add('highlight');
+                }
+            });
+        }
+        
+        function showFlows(flowClasses) {
+            // 隐藏所有数据流
+            document.querySelectorAll('.sql-flow, .parser-flow, .optimizer-flow, .executor-flow, .statistics-flow').forEach(line => {
+                line.style.opacity = '0.3';
+                line.classList.remove('flow-animation');
+            });
+            
+            // 显示指定的数据流
+            flowClasses.forEach(className => {
+                document.querySelectorAll(`.${className}`).forEach(line => {
+                    line.style.opacity = '0.8';
+                    line.classList.add('flow-animation');
+                });
+            });
+        }
+        
+        function resetView() {
+            // 移除所有高亮
+            document.querySelectorAll('.highlight').forEach(elem => {
+                elem.classList.remove('highlight');
+            });
+            
+            // 隐藏所有数据流动画
+            document.querySelectorAll('.sql-flow, .parser-flow, .optimizer-flow, .executor-flow, .statistics-flow').forEach(line => {
+                line.style.opacity = '0.6';
+                line.classList.remove('flow-animation');
+            });
+        }
+        
+        // 点击SVG空白处重置高亮
+        svg.addEventListener('click', (e) => {
+            if (e.target.tagName === 'svg' || e.target.id === 'mysql-server-architecture') {
+                resetView();
+            }
+        });
+        
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '1') document.getElementById('highlight-sql-flow').click();
+            else if (e.key === '2') document.getElementById('highlight-parser').click();
+            else if (e.key === '3') document.getElementById('highlight-optimizer').click();
+            else if (e.key === '4') document.getElementById('highlight-executor').click();
+            else if (e.key === '5') document.getElementById('highlight-binlog').click();
+            else if (e.key === 'f') document.getElementById('show-full-flow').click();
+            else if (e.key === '0' || e.key === 'Escape') document.getElementById('reset-highlight').click();
+            else if (e.key === 'h' && e.ctrlKey) {
+                alert('键盘快捷键：\n\n1 - SQL处理流程\n2 - 解析器详细流程\n3 - 优化器工作原理\n4 - 执行器与引擎交互\n5 - Binlog与2PC机制\nf - 显示完整数据流\n0/Esc - 重置视图\nCtrl+H - 显示帮助');
+                e.preventDefault();
+            }
+        });
+        
+        // 初始显示SQL处理流程
+        setTimeout(() => {
+            document.getElementById('highlight-sql-flow').click();
+        }, 1000);
+    </script>
+</body>
+</html>

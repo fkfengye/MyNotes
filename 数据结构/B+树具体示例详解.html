@@ -1,0 +1,363 @@
+<svg width="1600" height="1200" xmlns="http://www.w3.org/2000/svg">
+  <!-- 标题 -->
+  <text x="800" y="60" text-anchor="middle" font-size="32" font-weight="bold" fill="#333">B+树具体示例详解</text>
+  <text x="800" y="100" text-anchor="middle" font-size="18" fill="#666">根节点 → 分支节点 → 叶子节点的完整结构展示</text>
+  
+  <!-- ========== B+树整体结构 ========== -->
+  <rect x="50" y="130" width="1500" height="400" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="800" y="160" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">B+树结构示例（阶数m=3）</text>
+  
+  <!-- ========== 第1层：根节点 ========== -->
+  <g transform="translate(650, 200)">
+    <!-- 根节点容器 -->
+    <rect width="300" height="100" rx="8" ry="8" fill="#eef2ff" stroke="#4a6bff" stroke-width="3"/>
+    
+    <!-- 节点标题 -->
+    <text x="150" y="25" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">根节点（非叶子节点）</text>
+    
+    <!-- 键值区域 -->
+    <rect x="60" y="40" width="180" height="30" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="2"/>
+    
+    <!-- 键值分隔线 -->
+    <line x1="120" y1="40" x2="120" y2="70" stroke="#4a6bff" stroke-width="1"/>
+    <line x1="180" y1="40" x2="180" y2="70" stroke="#4a6bff" stroke-width="1"/>
+    
+    <!-- 键值标签 -->
+    <text x="90" y="60" text-anchor="middle" font-size="18" font-weight="bold">10</text>
+    <text x="150" y="60" text-anchor="middle" font-size="18" font-weight="bold">30</text>
+    
+    <!-- 指针区域 -->
+    <rect x="30" y="75" width="80" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="70" y="88" text-anchor="middle" font-size="14" fill="white">P1(左)</text>
+    
+    <rect x="120" y="75" width="60" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="150" y="88" text-anchor="middle" font-size="14" fill="white">P2(中)</text>
+    
+    <rect x="190" y="75" width="80" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="230" y="88" text-anchor="middle" font-size="14" fill="white">P3(右)</text>
+    
+    <!-- 键值范围说明 -->
+    <text x="150" y="115" text-anchor="middle" font-size="14" fill="#666">
+      P1: 键值 &lt; 10 | P2: 10 ≤ 键值 &lt; 30 | P3: 键值 ≥ 30
+    </text>
+  </g>
+  
+  <!-- 连接线：根节点到分支节点 -->
+  <path d="M650,300 L350,400" stroke="#4a6bff" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M800,300 L800,400" stroke="#4a6bff" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M950,300 L1050,400" stroke="#4a6bff" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  
+  <!-- 指针标签 -->
+  <text x="500" y="350" text-anchor="middle" font-size="14" fill="#4a6bff" font-weight="bold">P1 → 左分支节点</text>
+  <text x="800" y="350" text-anchor="middle" font-size="14" fill="#4a6bff" font-weight="bold">P2 → 右分支节点</text>
+  <text x="1100" y="350" text-anchor="middle" font-size="14" fill="#4a6bff" font-weight="bold">P3 → 预留指针</text>
+  
+  <!-- ========== 第2层：分支节点 ========== -->
+  <!-- 左分支节点 -->
+  <g transform="translate(200, 420)">
+    <!-- 节点容器 -->
+    <rect width="300" height="100" rx="8" ry="8" fill="#eef2ff" stroke="#4a6bff" stroke-width="2"/>
+    
+    <!-- 节点标题 -->
+    <text x="150" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#2d4cd2">左分支节点（非叶子）</text>
+    
+    <!-- 键值区域 -->
+    <rect x="60" y="40" width="180" height="30" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="2"/>
+    
+    <!-- 键值分隔线 -->
+    <line x1="120" y1="40" x2="120" y2="70" stroke="#4a6bff" stroke-width="1"/>
+    
+    <!-- 键值标签 -->
+    <text x="90" y="60" text-anchor="middle" font-size="18" font-weight="bold">5</text>
+    <text x="150" y="60" text-anchor="middle" font-size="18" font-weight="bold">15</text>
+    
+    <!-- 指针区域 -->
+    <rect x="30" y="75" width="80" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="70" y="88" text-anchor="middle" font-size="14" fill="white">P1(左)</text>
+    
+    <rect x="120" y="75" width="60" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="150" y="88" text-anchor="middle" font-size="14" fill="white">P2(中)</text>
+    
+    <rect x="190" y="75" width="80" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="230" y="88" text-anchor="middle" font-size="14" fill="white">P3(右)</text>
+    
+    <!-- 键值范围说明 -->
+    <text x="150" y="115" text-anchor="middle" font-size="13" fill="#666">
+      P1: 键值 &lt; 5 | P2: 5 ≤ 键值 &lt; 15 | P3: 键值 ≥ 15
+    </text>
+  </g>
+  
+  <!-- 右分支节点 -->
+  <g transform="translate(650, 420)">
+    <!-- 节点容器 -->
+    <rect width="300" height="100" rx="8" ry="8" fill="#eef2ff" stroke="#4a6bff" stroke-width="2"/>
+    
+    <!-- 节点标题 -->
+    <text x="150" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#2d4cd2">右分支节点（非叶子）</text>
+    
+    <!-- 键值区域 -->
+    <rect x="60" y="40" width="180" height="30" rx="4" ry="4" fill="#ffffff" stroke="#4a6bff" stroke-width="2"/>
+    
+    <!-- 键值分隔线 -->
+    <line x1="120" y1="40" x2="120" y2="70" stroke="#4a6bff" stroke-width="1"/>
+    
+    <!-- 键值标签 -->
+    <text x="90" y="60" text-anchor="middle" font-size="18" font-weight="bold">25</text>
+    <text x="150" y="60" text-anchor="middle" font-size="18" font-weight="bold">35</text>
+    
+    <!-- 指针区域 -->
+    <rect x="30" y="75" width="80" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="70" y="88" text-anchor="middle" font-size="14" fill="white">P1(左)</text>
+    
+    <rect x="120" y="75" width="60" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="150" y="88" text-anchor="middle" font-size="14" fill="white">P2(中)</text>
+    
+    <rect x="190" y="75" width="80" height="20" rx="3" ry="3" fill="#4a6bff" stroke="#2d4cd2" stroke-width="1"/>
+    <text x="230" y="88" text-anchor="middle" font-size="14" fill="white">P3(右)</text>
+    
+    <!-- 键值范围说明 -->
+    <text x="150" y="115" text-anchor="middle" font-size="13" fill="#666">
+      P1: 键值 &lt; 25 | P2: 25 ≤ 键值 &lt; 35 | P3: 键值 ≥ 35
+    </text>
+  </g>
+  
+  <!-- 连接线：分支节点到叶子节点 -->
+  <g transform="translate(350, 520)">
+    <path d="M0,0 L-150,60" stroke="#4a6bff" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+    <path d="M0,0 L0,60" stroke="#4a6bff" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+    <path d="M0,0 L150,60" stroke="#4a6bff" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  </g>
+  
+  <g transform="translate(800, 520)">
+    <path d="M0,0 L-150,60" stroke="#4a6bff" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+    <path d="M0,0 L0,60" stroke="#4a6bff" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+    <path d="M0,0 L150,60" stroke="#4a6bff" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  </g>
+  
+  <!-- 指针标签 -->
+  <text x="250" y="490" text-anchor="middle" font-size="13" fill="#4a6bff">P1 → 叶子1</text>
+  <text x="350" y="490" text-anchor="middle" font-size="13" fill="#4a6bff">P2 → 叶子2</text>
+  <text x="450" y="490" text-anchor="middle" font-size="13" fill="#4a6bff">P3 → 预留</text>
+  
+  <text x="700" y="490" text-anchor="middle" font-size="13" fill="#4a6bff">P1 → 叶子3</text>
+  <text x="800" y="490" text-anchor="middle" font-size="13" fill="#4a6bff">P2 → 叶子4</text>
+  <text x="900" y="490" text-anchor="middle" font-size="13" fill="#4a6bff">P3 → 预留</text>
+  
+  <!-- ========== 第3层：叶子节点 ========== -->
+  <!-- 叶子节点层标题 -->
+  <rect x="100" y="590" width="1400" height="40" fill="#f8f8f8" stroke="#ccc" stroke-width="1"/>
+  <text x="800" y="615" text-anchor="middle" font-size="20" font-weight="bold" fill="#666">叶子节点层（存储实际数据）</text>
+  
+  <!-- 叶子节点1 -->
+  <g transform="translate(100, 640)">
+    <!-- 节点容器 -->
+    <rect width="300" height="150" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    
+    <!-- 节点标题 -->
+    <text x="150" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">叶子节点1</text>
+    
+    <!-- 键值对1 -->
+    <rect x="30" y="40" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="40" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="58" text-anchor="middle" font-size="16" font-weight="bold">键: 3</text>
+    <text x="210" y="58" text-anchor="middle" font-size="16">数据: Data3</text>
+    
+    <!-- 键值对2 -->
+    <rect x="30" y="75" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="75" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="93" text-anchor="middle" font-size="16" font-weight="bold">键: 7</text>
+    <text x="210" y="93" text-anchor="middle" font-size="16">数据: Data7</text>
+    
+    <!-- 键值对3 -->
+    <rect x="30" y="110" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="110" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="128" text-anchor="middle" font-size="16" font-weight="bold">键: 9</text>
+    <text x="210" y="128" text-anchor="middle" font-size="16">数据: Data9</text>
+    
+    <!-- 链表指针 -->
+    <rect x="30" y="145" width="115" height="30" rx="4" ry="4" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="87" y="163" text-anchor="middle" font-size="14">前驱: null</text>
+    
+    <rect x="155" y="145" width="115" height="30" rx="4" ry="4" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="212" y="163" text-anchor="middle" font-size="14">后继: →叶子2</text>
+  </g>
+  
+  <!-- 叶子节点2 -->
+  <g transform="translate(450, 640)">
+    <!-- 节点容器 -->
+    <rect width="300" height="150" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    
+    <!-- 节点标题 -->
+    <text x="150" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">叶子节点2</text>
+    
+    <!-- 键值对1 -->
+    <rect x="30" y="40" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="40" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="58" text-anchor="middle" font-size="16" font-weight="bold">键: 12</text>
+    <text x="210" y="58" text-anchor="middle" font-size="16">数据: Data12</text>
+    
+    <!-- 键值对2 -->
+    <rect x="30" y="75" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="75" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="93" text-anchor="middle" font-size="16" font-weight="bold">键: 14</text>
+    <text x="210" y="93" text-anchor="middle" font-size="16">数据: Data14</text>
+    
+    <!-- 键值对3 -->
+    <rect x="30" y="110" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="110" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="128" text-anchor="middle" font-size="16" font-weight="bold">键: 18</text>
+    <text x="210" y="128" text-anchor="middle" font-size="16">数据: Data18</text>
+    
+    <!-- 链表指针 -->
+    <rect x="30" y="145" width="115" height="30" rx="4" ry="4" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="87" y="163" text-anchor="middle" font-size="14">前驱: ←叶子1</text>
+    
+    <rect x="155" y="145" width="115" height="30" rx="4" ry="4" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="212" y="163" text-anchor="middle" font-size="14">后继: →叶子3</text>
+  </g>
+  
+  <!-- 叶子节点3 -->
+  <g transform="translate(800, 640)">
+    <!-- 节点容器 -->
+    <rect width="300" height="150" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    
+    <!-- 节点标题 -->
+    <text x="150" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">叶子节点3</text>
+    
+    <!-- 键值对1 -->
+    <rect x="30" y="40" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="40" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="58" text-anchor="middle" font-size="16" font-weight="bold">键: 25</text>
+    <text x="210" y="58" text-anchor="middle" font-size="16">数据: Data25</text>
+    
+    <!-- 键值对2 -->
+    <rect x="30" y="75" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="75" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="93" text-anchor="middle" font-size="16" font-weight="bold">键: 28</text>
+    <text x="210" y="93" text-anchor="middle" font-size="16">数据: Data28</text>
+    
+    <!-- 键值对3 -->
+    <rect x="30" y="110" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="110" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="128" text-anchor="middle" font-size="16" font-weight="bold">键: 32</text>
+    <text x="210" y="128" text-anchor="middle" font-size="16">数据: Data32</text>
+    
+    <!-- 链表指针 -->
+    <rect x="30" y="145" width="115" height="30" rx="4" ry="4" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="87" y="163" text-anchor="middle" font-size="14">前驱: ←叶子2</text>
+    
+    <rect x="155" y="145" width="115" height="30" rx="4" ry="4" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="212" y="163" text-anchor="middle" font-size="14">后继: →叶子4</text>
+  </g>
+  
+  <!-- 叶子节点4 -->
+  <g transform="translate(1150, 640)">
+    <!-- 节点容器 -->
+    <rect width="300" height="150" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+    
+    <!-- 节点标题 -->
+    <text x="150" y="25" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e7a34">叶子节点4</text>
+    
+    <!-- 键值对1 -->
+    <rect x="30" y="40" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="40" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="58" text-anchor="middle" font-size="16" font-weight="bold">键: 35</text>
+    <text x="210" y="58" text-anchor="middle" font-size="16">数据: Data35</text>
+    
+    <!-- 键值对2 -->
+    <rect x="30" y="75" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="75" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="93" text-anchor="middle" font-size="16" font-weight="bold">键: 38</text>
+    <text x="210" y="93" text-anchor="middle" font-size="16">数据: Data38</text>
+    
+    <!-- 键值对3 -->
+    <rect x="30" y="110" width="240" height="30" rx="4" ry="4" fill="#ffffff" stroke="#34c759" stroke-width="1"/>
+    <rect x="30" y="110" width="120" height="30" fill="#f0fff0" stroke="#34c759" stroke-width="1"/>
+    <text x="90" y="128" text-anchor="middle" font-size="16" font-weight="bold">键: 42</text>
+    <text x="210" y="128" text-anchor="middle" font-size="16">数据: Data42</text>
+    
+    <!-- 链表指针 -->
+    <rect x="30" y="145" width="115" height="30" rx="4" ry="4" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="87" y="163" text-anchor="middle" font-size="14">前驱: ←叶子3</text>
+    
+    <rect x="155" y="145" width="115" height="30" rx="4" ry="4" fill="#ffefe6" stroke="#ff8a3d" stroke-width="1"/>
+    <text x="212" y="163" text-anchor="middle" font-size="14">后继: null</text>
+  </g>
+  
+  <!-- 叶子节点之间的双向链表 -->
+  <path d="M400,715 L450,715" stroke="#ff6b35" stroke-width="3" fill="none"/>
+  <polygon points="450,715 445,710 445,720" fill="#ff6b35"/>
+  
+  <path d="M750,715 L800,715" stroke="#ff6b35" stroke-width="3" fill="none"/>
+  <polygon points="800,715 795,710 795,720" fill="#ff6b35"/>
+  
+  <path d="M1100,715 L1150,715" stroke="#ff6b35" stroke-width="3" fill="none"/>
+  <polygon points="1150,715 1145,710 1145,720" fill="#ff6b35"/>
+  
+  <!-- 反向箭头示意 -->
+  <path d="M1150,730 L1100,730" stroke="#ff6b35" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+  <polygon points="1100,730 1105,725 1105,735" fill="#ff6b35"/>
+  
+  <path d="M800,730 L750,730" stroke="#ff6b35" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+  <polygon points="750,730 755,725 755,735" fill="#ff6b35"/>
+  
+  <path d="M450,730 L400,730" stroke="#ff6b35" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+  <polygon points="400,730 405,725 405,735" fill="#ff6b35"/>
+  
+  <text x="800" y="760" text-anchor="middle" font-size="18" font-weight="bold" fill="#ff6b35">叶子节点双向链表（支持高效范围查询）</text>
+  
+  <!-- ========== 查询示例 ========== -->
+  <rect x="50" y="820" width="1500" height="350" rx="8" ry="8" fill="#f9f9ff" stroke="#666" stroke-width="1"/>
+  <text x="800" y="850" text-anchor="middle" font-size="26" font-weight="bold" fill="#333">查询示例</text>
+  
+  <!-- 精确查询 -->
+  <rect x="100" y="880" width="400" height="120" rx="8" ry="8" fill="#e6ecff" stroke="#4a6bff" stroke-width="2"/>
+  <text x="300" y="905" text-anchor="middle" font-size="20" font-weight="bold" fill="#2d4cd2">精确查询：查找键值 28</text>
+  
+  <g font-size="16" fill="#333">
+    <text x="120" y="935">1. 从根节点开始：28 ≥ 10，选择P2(中)</text>
+    <text x="120" y="960">2. 到右分支节点：28 ≥ 25，选择P2(中)</text>
+    <text x="120" y="985">3. 到达叶子节点3，找到键值28</text>
+    <text x="120" y="1010">4. 返回对应数据：Data28</text>
+  </g>
+  
+  <!-- 范围查询 -->
+  <rect x="550" y="880" width="400" height="120" rx="8" ry="8" fill="#e6ffe6" stroke="#34c759" stroke-width="2"/>
+  <text x="750" y="905" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e7a34">范围查询：查找键值 [15, 35]</text>
+  
+  <g font-size="16" fill="#333">
+    <text x="570" y="935">1. 查找起始键值15：到达叶子节点2</text>
+    <text x="570" y="960">2. 从叶子节点2开始读取：18, ...</text>
+    <text x="570" y="985">3. 通过链表到叶子节点3：25, 28, 32</text>
+    <text x="570" y="1010">4. 到叶子节点4：35（结束）</text>
+  </g>
+  
+  <!-- 插入示例 -->
+  <rect x="1000" y="880" width="400" height="120" rx="8" ry="8" fill="#ffefe6" stroke="#ff8a3d" stroke-width="2"/>
+  <text x="1200" y="905" text-anchor="middle" font-size="20" font-weight="bold" fill="#cc5a1a">插入示例：插入键值 20</text>
+  
+  <g font-size="16" fill="#333">
+    <text x="1020" y="935">1. 查找应插入位置：叶子节点2</text>
+    <text x="1020" y="960">2. 叶子节点2已满（3个键值）</text>
+    <text x="1020" y="985">3. 分裂叶子节点2，创建新节点</text>
+    <text x="1020" y="1010">4. 更新父节点键值</text>
+  </g>
+  
+  <!-- B+树优势 -->
+  <rect x="100" y="1020" width="1300" height="120" rx="8" ry="8" fill="#f0f8ff" stroke="#4a6bff" stroke-width="1"/>
+  <text x="750" y="1045" text-anchor="middle" font-size="22" font-weight="bold" fill="#2d4cd2">B+树优势总结</text>
+  
+  <g font-size="16" fill="#333">
+    <text x="200" y="1070">• 所有叶子节点在同一层，保证查询稳定</text>
+    <text x="200" y="1095">• 非叶子节点只存储键值，提高节点容量</text>
+    <text x="700" y="1070">• 叶子节点双向链表，支持高效范围查询</text>
+    <text x="700" y="1095">• 高扇出降低树高，减少磁盘IO次数</text>
+  </g>
+  
+  <!-- 箭头定义 -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a6bff"/>
+    </marker>
+  </defs>
+</svg>

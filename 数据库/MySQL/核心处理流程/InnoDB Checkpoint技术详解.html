@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InnoDB Checkpoint技术详解</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #004d40 0%, #00796b 100%);
+            color: white;
+            padding: 30px 40px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            max-width: 900px;
+        }
+        
+        .content {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        
+        .main-content {
+            flex: 1;
+            padding: 30px;
+            border-right: 1px solid #eaeaea;
+            min-width: 900px;
+        }
+        
+        .sidebar {
+            width: 450px;
+            padding: 30px;
+            background-color: #f9fafc;
+            overflow-y: auto;
+            max-height: 1200px;
+        }
+        
+        h2 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: #004d40;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eaeaea;
+        }
+        
+        h3 {
+            font-size: 1.4rem;
+            margin: 25px 0 15px;
+            color: #00796b;
+        }
+        
+        h4 {
+            font-size: 1.1rem;
+            margin: 20px 0 10px;
+            color: #333;
+        }
+        
+        .checkpoint-types {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        
+        .type-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            border-top: 4px solid #00796b;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .type-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .type-card.active {
+            border-top-color: #ff9800;
+            background-color: #e0f2f1;
+        }
+        
+        .type-card.sharp {
+            border-top-color: #4caf50;
+        }
+        
+        .type-card.fuzzy {
+            border-top-color: #2196f3;
+        }
+        
+        .type-card.async {
+            border-top-color: #ff9800;
+        }
+        
+        .type-card.sync {
+            border-top-color: #f44336;
+        }
+        
+        .type-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+            color: white;
+        }
+        
+        .sharp .type-icon {
+            background-color: #4caf50;
+        }
+        
+        .fuzzy .type-icon {
+            background-color: #2196f3;
+        }
+        
+        .async .type-icon {
+            background-color: #ff9800;
+        }
+        
+        .sync .type-icon {
+            background-color: #f44336;
+        }
+        
+        .type-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .type-description {
+            font-size: 0.95rem;
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        
+        .type-characteristics {
+            font-size: 0.9rem;
+            color: #666;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        
+        .checkpoint-visual {
+            margin-top: 30px;
+            padding: 25px;
+            background-color: #f5f5f5;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+            height: 500px;
+        }
+        
+        #checkpointCanvas {
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            border-radius: 6px;
+        }
+        
+        .technical-details {
+            margin-top: 30px;
+            padding: 25px;
+            background-color: #e0f2f1;
+            border-radius: 8px;
+            border-left: 4px solid #00796b;
+        }
+        
+        .detail-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #b2dfdb;
+        }
+        
+        .detail-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .detail-title {
+            font-weight: 600;
+            color: #004d40;
+            margin-bottom: 5px;
+        }
+        
+        .detail-description {
+            font-size: 0.95rem;
+            color: #555;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+            font-size: 0.95rem;
+        }
+        
+        .btn-primary {
+            background-color: #00796b;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #004d40;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 121, 107, 0.2);
+        }
+        
+        .btn-secondary {
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #e0e0e0;
+            transform: translateY(-2px);
+        }
+        
+        .sidebar-content {
+            margin-top: 20px;
+        }
+        
+        .checkpoint-timeline {
+            margin-top: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .timeline-item {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #00796b;
+            background-color: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            position: relative;
+        }
+        
+        .timeline-item.active {
+            background-color: #b2dfdb;
+            border-left-color: #ff9800;
+        }
+        
+        .timeline-step {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            background-color: #00796b;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 0.8rem;
+        }
+        
+        .timeline-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .timeline-description {
+            font-size: 0.85rem;
+            color: #666;
+            margin-left: 34px;
+        }
+        
+        .parameter-container {
+            margin-top: 30px;
+            overflow-x: auto;
+        }
+        
+        .parameter-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 400px;
+        }
+        
+        .parameter-table th {
+            background-color: #00796b;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        
+        .parameter-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            vertical-align: top;
+        }
+        
+        .parameter-table tr:nth-child(even) {
+            background-color: #f5f5f5;
+        }
+        
+        .parameter-table tr:hover {
+            background-color: #e0f2f1;
+        }
+        
+        .parameter-name {
+            font-weight: 600;
+            color: #004d40;
+            white-space: nowrap;
+            min-width: 200px;
+        }
+        
+        .parameter-value {
+            font-family: 'Courier New', monospace;
+            color: #d32f2f;
+            min-width: 100px;
+        }
+        
+        .parameter-description {
+            font-size: 0.9rem;
+            color: #555;
+            min-width: 250px;
+        }
+        
+        .algorithm-explanation {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f3e5f5;
+            border-radius: 8px;
+            border-left: 4px solid #9c27b0;
+        }
+        
+        .algorithm-explanation h3 {
+            color: #9c27b0;
+        }
+        
+        .algorithm-step {
+            padding: 10px;
+            background-color: white;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9rem;
+            border-top: 1px solid #eaeaea;
+            margin-top: 20px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-running {
+            background-color: #4caf50;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .status-paused {
+            background-color: #ff9800;
+        }
+        
+        .status-stopped {
+            background-color: #f44336;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .performance-metrics {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .metric-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+            border-left: 4px solid #00796b;
+        }
+        
+        .metric-name {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #004d40;
+        }
+        
+        .metric-unit {
+            font-size: 0.8rem;
+            color: #888;
+            margin-left: 5px;
+        }
+        
+        @media (max-width: 1200px) {
+            .content {
+                flex-direction: column;
+            }
+            
+            .main-content, .sidebar {
+                width: 100%;
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>InnoDB Checkpoint技术详解</h1>
+            <p class="subtitle">深入解析InnoDB存储引擎的检查点机制：Sharp Checkpoint、Fuzzy Checkpoint、LSN机制与恢复原理</p>
+        </header>
+        
+        <div class="content">
+            <div class="main-content">
+                <h2>Checkpoint技术类型</h2>
+                
+                <div class="checkpoint-types">
+                    <div class="type-card sharp active" data-type="sharp">
+                        <div class="type-icon">⚡</div>
+                        <div class="type-title">Sharp Checkpoint</div>
+                        <div class="type-description">
+                            完全检查点，一次性将所有脏页刷新到磁盘。发生在数据库关闭时或执行特定命令时。
+                        </div>
+                        <div class="type-characteristics">
+                            <strong>特点：</strong> 阻塞操作、刷新所有脏页、恢复时间最短
+                        </div>
+                    </div>
+                    
+                    <div class="type-card fuzzy" data-type="fuzzy">
+                        <div class="type-icon">🌫️</div>
+                        <div class="type-title">Fuzzy Checkpoint</div>
+                        <div class="type-description">
+                            模糊检查点，只刷新部分脏页到磁盘。发生在数据库运行期间，避免性能影响。
+                        </div>
+                        <div class="type-characteristics">
+                            <strong>特点：</strong> 非阻塞、增量刷新、对性能影响小
+                        </div>
+                    </div>
+                    
+                    <div class="type-card async" data-type="async">
+                        <div class="type-icon">🔄</div>
+                        <div class="type-title">Async/Sync Flush Checkpoint</div>
+                        <div class="type-description">
+                            当Redo Log文件不可用时触发，确保重做日志可以安全覆盖。
+                        </div>
+                        <div class="type-characteristics">
+                            <strong>特点：</strong> 由Page Cleaner线程执行、基于LSN计算
+                        </div>
+                    </div>
+                    
+                    <div class="type-card sync" data-type="sync">
+                        <div class="type-icon">📊</div>
+                        <div class="type-title">Dirty Page too much Checkpoint</div>
+                        <div class="type-description">
+                            当Buffer Pool中脏页比例超过阈值时触发，防止脏页过多影响性能。
+                        </div>
+                        <div class="type-characteristics">
+                            <strong>特点：</strong> 基于脏页比例、自适应触发、防止内存压力
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>Checkpoint机制可视化</h3>
+                <div class="checkpoint-visual">
+                    <canvas id="checkpointCanvas"></canvas>
+                </div>
+                
+                <div class="technical-details" id="technicalDetails">
+                    <h3>Sharp Checkpoint技术详情</h3>
+                    <div class="detail-item">
+                        <div class="detail-title">触发时机</div>
+                        <div class="detail-description">
+                            1. 数据库正常关闭（SHUTDOWN）<br>
+                            2. 设置innodb_fast_shutdown=0时<br>
+                            3. 执行FLUSH TABLES WITH READ LOCK命令<br>
+                            4. 备份工具请求一致性备份时
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-title">执行过程</div>
+                        <div class="detail-description">
+                            1. 停止接受新的事务请求<br>
+                            2. 等待所有活跃事务完成<br>
+                            3. 将Buffer Pool中所有脏页刷新到磁盘<br>
+                            4. 更新Checkpoint LSN到最新的位置<br>
+                            5. 写入一个特殊的检查点记录到重做日志
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-title">优缺点分析</div>
+                        <div class="detail-description">
+                            <strong>优点：</strong>恢复时间最短，数据一致性最高<br>
+                            <strong>缺点：</strong>阻塞数据库服务，性能影响大，不适合生产环境频繁使用
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar">
+                <h2>Checkpoint执行流程</h2>
+                
+                <div class="controls">
+                    <button id="startCheckpointBtn" class="btn-primary">开始Checkpoint流程</button>
+                    <button id="resetBtn" class="btn-secondary">重置</button>
+                </div>
+                
+                <div class="checkpoint-timeline" id="checkpointTimeline">
+                    <!-- 时间线将通过JavaScript动态生成 -->
+                </div>
+                
+                <div class="sidebar-content">
+                    <h3>关键参数配置</h3>
+                    <div class="parameter-container">
+                        <table class="parameter-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 180px;">参数</th>
+                                    <th style="width: 120px;">默认值</th>
+                                    <th>说明</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="parameter-name">innodb_max_dirty_pages_pct</td>
+                                    <td class="parameter-value">75%</td>
+                                    <td class="parameter-description">触发Dirty Page Checkpoint的脏页比例阈值。当Buffer Pool中脏页比例超过此值时触发检查点。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_max_dirty_pages_pct_lwm</td>
+                                    <td class="parameter-value">0%</td>
+                                    <td class="parameter-description">低水位标记，提前开始刷新脏页的阈值。当脏页比例超过此值时，开始预刷新以防止达到上限。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_io_capacity</td>
+                                    <td class="parameter-value">200</td>
+                                    <td class="parameter-description">每秒可执行的IO操作数（针对旋转磁盘）。影响刷新脏页和合并插入缓冲的速度。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_io_capacity_max</td>
+                                    <td class="parameter-value">2000</td>
+                                    <td class="parameter-description">IO操作的最大上限。在紧急情况下，InnoDB可以超过innodb_io_capacity达到此值。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_lru_scan_depth</td>
+                                    <td class="parameter-value">1024</td>
+                                    <td class="parameter-description">LRU列表扫描深度，影响页面刷新。Page Cleaner线程每次扫描LRU列表的页面数。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_adaptive_flushing</td>
+                                    <td class="parameter-value">ON</td>
+                                    <td class="parameter-description">自适应刷新，根据工作负载自动调整刷新速率。基于Redo Log生成速率动态计算。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_log_file_size</td>
+                                    <td class="parameter-value">48M</td>
+                                    <td class="parameter-description">每个Redo Log文件的大小。影响检查点触发频率和恢复时间。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_log_files_in_group</td>
+                                    <td class="parameter-value">2</td>
+                                    <td class="parameter-description">Redo Log文件组的文件数量。与innodb_log_file_size共同决定Redo Log总容量。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_flush_neighbors</td>
+                                    <td class="parameter-value">1</td>
+                                    <td class="parameter-description">刷新相邻页面。对于旋转磁盘，刷新连续页面可以提高IO效率。</td>
+                                </tr>
+                                <tr>
+                                    <td class="parameter-name">innodb_buffer_pool_size</td>
+                                    <td class="parameter-value">128M</td>
+                                    <td class="parameter-description">Buffer Pool大小。直接影响可以缓存的脏页数量。</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="performance-metrics">
+                        <div class="metric-card">
+                            <div class="metric-name">当前脏页比例</div>
+                            <div class="metric-value" id="dirtyPageRatio">75%</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-name">Checkpoint年龄</div>
+                            <div class="metric-value" id="checkpointAge">45%</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-name">刷新速率</div>
+                            <div class="metric-value" id="flushRate">200<span class="metric-unit">页/秒</span></div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-name">Redo Log使用率</div>
+                            <div class="metric-value" id="redoLogUsage">65%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="algorithm-explanation">
+                        <h3>LSN机制与恢复算法</h3>
+                        <div class="algorithm-step">
+                            <strong>LSN（Log Sequence Number）</strong><br>
+                            日志序列号，单调递增的64位整数，记录Redo Log的写入位置。每个数据页、Redo Log记录、Checkpoint都有对应的LSN。
+                        </div>
+                        <div class="algorithm-step">
+                            <strong>Checkpoint LSN</strong><br>
+                            记录最后一次Checkpoint的位置，恢复时从该点开始。存储在系统表空间(ibdata)中。
+                        </div>
+                        <div class="algorithm-step">
+                            <strong>恢复算法</strong><br>
+                            1. 找到最近的Checkpoint记录<br>
+                            2. 从Checkpoint LSN开始重放Redo Log<br>
+                            3. 应用Undo Log回滚未提交事务<br>
+                            4. 数据库恢复到一致状态
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>InnoDB Checkpoint技术详解 | LSN机制 | 崩溃恢复原理 | 性能优化</p>
+        </footer>
+    </div>
+
+    <script>
+        // Checkpoint技术数据
+        const checkpointTypes = {
+            sharp: {
+                title: "Sharp Checkpoint",
+                color: "#4caf50",
+                steps: [
+                    { id: 1, title: "停止接受新事务", description: "暂停接受新的事务请求，等待当前事务完成" },
+                    { id: 2, title: "等待活跃事务", description: "等待所有活跃事务提交或回滚完成" },
+                    { id: 3, title: "刷新所有脏页", description: "将Buffer Pool中所有脏页同步刷新到磁盘" },
+                    { id: 4, title: "更新Checkpoint LSN", description: "记录最新的检查点位置到系统表空间" },
+                    { id: 5, title: "写入检查点记录", description: "在Redo Log中写入特殊的检查点记录" }
+                ],
+                description: "完全检查点，一次性刷新所有脏页到磁盘，主要用于数据库关闭或备份场景。",
+                characteristics: "阻塞操作、刷新所有脏页、恢复时间最短"
+            },
+            fuzzy: {
+                title: "Fuzzy Checkpoint",
+                color: "#2196f3",
+                steps: [
+                    { id: 1, title: "确定刷新范围", description: "基于LSN计算需要刷新的脏页范围" },
+                    { id: 2, title: "选择脏页", description: "从Flush List中选择最旧的脏页进行刷新" },
+                    { id: 3, title: "异步刷新脏页", description: "通过Page Cleaner线程异步刷新选中的脏页" },
+                    { id: 4, title: "更新检查点信息", description: "更新已刷新的最小LSN，但不阻塞用户操作" },
+                    { id: 5, title: "继续服务", description: "数据库继续正常服务，用户几乎无感知" }
+                ],
+                description: "模糊检查点，增量刷新部分脏页，对数据库性能影响最小，是生产环境的主要检查点类型。",
+                characteristics: "非阻塞、增量刷新、对性能影响小"
+            },
+            async: {
+                title: "Async/Sync Flush Checkpoint",
+                color: "#ff9800",
+                steps: [
+                    { id: 1, title: "监控Redo Log空间", description: "持续监控Redo Log文件的可用空间" },
+                    { id: 2, title: "计算安全LSN", description: "计算可以安全覆盖的Redo Log位置" },
+                    { id: 3, title: "检查脏页LSN", description: "检查Buffer Pool中脏页的LSN是否早于安全LSN" },
+                    { id: 4, title: "触发强制刷新", description: "如果脏页LSN早于安全LSN，触发强制刷新" },
+                    { id: 5, title: "释放Redo Log空间", description: "刷新完成后，Redo Log相应空间可以被重用" }
+                ],
+                description: "当Redo Log空间不足时触发，确保可以安全覆盖旧的Redo Log记录。",
+                characteristics: "由Page Cleaner线程执行、基于LSN计算、防止Redo Log写满"
+            },
+            sync: {
+                title: "Dirty Page too much Checkpoint",
+                color: "#f44336",
+                steps: [
+                    { id: 1, title: "监控脏页比例", description: "持续监控Buffer Pool中脏页的比例" },
+                    { id: 2, title: "检查阈值", description: "当脏页比例超过innodb_max_dirty_pages_pct时触发" },
+                    { id: 3, title: "计算刷新数量", description: "基于当前脏页比例计算需要刷新的页面数量" },
+                    { id: 4, title: "异步刷新脏页", description: "启动后台线程刷新脏页到磁盘" },
+                    { id: 5, title: "降低脏页比例", description: "将脏页比例降低到安全水平以下" }
+                ],
+                description: "当Buffer Pool中脏页过多时触发，防止脏页占用过多内存影响数据库性能。",
+                characteristics: "基于脏页比例、自适应触发、防止内存压力"
+            }
+        };
+
+        // 获取DOM元素
+        const checkpointCanvas = document.getElementById('checkpointCanvas');
+        const ctx = checkpointCanvas.getContext('2d');
+        const typeCards = document.querySelectorAll('.type-card');
+        const technicalDetails = document.getElementById('technicalDetails');
+        const checkpointTimeline = document.getElementById('checkpointTimeline');
+        const startCheckpointBtn = document.getElementById('startCheckpointBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        
+        // 性能指标元素
+        const dirtyPageRatio = document.getElementById('dirtyPageRatio');
+        const checkpointAge = document.getElementById('checkpointAge');
+        const flushRate = document.getElementById('flushRate');
+        const redoLogUsage = document.getElementById('redoLogUsage');
+
+        // 当前选中的Checkpoint类型
+        let currentCheckpointType = 'sharp';
+        let currentStep = 0;
+        let animationInterval = null;
+        let isRunning = false;
+
+        // 初始化画布大小
+        function initCanvasSize() {
+            const container = checkpointCanvas.parentElement;
+            checkpointCanvas.width = container.clientWidth;
+            checkpointCanvas.height = container.clientHeight;
+        }
+
+        // 绘制Checkpoint流程图
+        function drawCheckpointFlow() {
+            const type = checkpointTypes[currentCheckpointType];
+            const steps = type.steps;
+            
+            // 清除画布
+            ctx.clearRect(0, 0, checkpointCanvas.width, checkpointCanvas.height);
+            
+            // 绘制背景
+            ctx.fillStyle = '#f9f9f9';
+            ctx.fillRect(0, 0, checkpointCanvas.width, checkpointCanvas.height);
+            
+            // 绘制标题
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${type.title}执行流程`, checkpointCanvas.width / 2, 40);
+            
+            // 绘制Buffer Pool区域
+            drawBufferPool();
+            
+            // 绘制Redo Log区域
+            drawRedoLog();
+            
+            // 绘制磁盘区域
+            drawDiskStorage();
+            
+            // 绘制步骤说明
+            drawStepDescription(steps);
+            
+            // 绘制数据流动
+            drawDataFlow(steps);
+        }
+
+        // 绘制Buffer Pool
+        function drawBufferPool() {
+            const x = 50;
+            const y = 80;
+            const width = 250;
+            const height = 150;
+            
+            // Buffer Pool边框
+            ctx.strokeStyle = '#2196f3';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
+            
+            // Buffer Pool标题
+            ctx.fillStyle = '#2196f3';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Buffer Pool', x + width/2, y - 10);
+            
+            // 绘制脏页和干净页
+            const pageSize = 20;
+            const cols = 8;
+            const rows = 5;
+            
+            // 根据当前步骤确定脏页比例
+            let dirtyRatio = 0.7;
+            if (currentCheckpointType === 'sync') {
+                dirtyRatio = Math.min(0.9, 0.5 + currentStep * 0.1);
+            }
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const pageX = x + 10 + col * (pageSize + 5);
+                    const pageY = y + 10 + row * (pageSize + 5);
+                    const isDirty = Math.random() < dirtyRatio;
+                    
+                    // 绘制页面
+                    ctx.fillStyle = isDirty ? '#ff9800' : '#4caf50';
+                    ctx.fillRect(pageX, pageY, pageSize, pageSize);
+                    
+                    // 页面边框
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(pageX, pageY, pageSize, pageSize);
+                    
+                    // 脏页标记
+                    if (isDirty && currentStep > 0) {
+                        ctx.fillStyle = '#f44336';
+                        ctx.font = '10px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('D', pageX + pageSize/2, pageY + pageSize/2);
+                    }
+                }
+            }
+            
+            // 显示脏页比例
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`脏页比例: ${Math.round(dirtyRatio * 100)}%`, x, y + height + 15);
+        }
+
+        // 绘制Redo Log
+        function drawRedoLog() {
+            const x = 350;
+            const y = 80;
+            const width = 250;
+            const height = 150;
+            
+            // Redo Log边框
+            ctx.strokeStyle = '#f44336';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
+            
+            // Redo Log标题
+            ctx.fillStyle = '#f44336';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Redo Log', x + width/2, y - 10);
+            
+            // 绘制Redo Log条目
+            const logHeight = 15;
+            const logCount = 8;
+            
+            // 计算检查点位置
+            let checkpointPos = 3;
+            if (currentStep > 2) {
+                checkpointPos = Math.min(6, 3 + currentStep);
+            }
+            
+            for (let i = 0; i < logCount; i++) {
+                const logY = y + 10 + i * (logHeight + 5);
+                
+                // 绘制日志条目
+                ctx.fillStyle = i < checkpointPos ? '#ffcdd2' : '#ffebee';
+                ctx.fillRect(x + 10, logY, width - 20, logHeight);
+                
+                // 日志条目边框
+                ctx.strokeStyle = '#c62828';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + 10, logY, width - 20, logHeight);
+                
+                // 日志内容
+                ctx.fillStyle = '#333';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`LSN: ${1000 + i * 100}`, x + 15, logY + logHeight/2 + 3);
+                
+                // 检查点标记
+                if (i === checkpointPos && currentStep > 2) {
+                    ctx.fillStyle = '#4caf50';
+                    ctx.font = 'bold 10px Arial';
+                    ctx.textAlign = 'right';
+                    ctx.fillText('✓ Checkpoint', x + width - 15, logY + logHeight/2 + 3);
+                }
+            }
+            
+            // 显示LSN信息
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Checkpoint LSN: ${1000 + checkpointPos * 100}`, x, y + height + 15);
+        }
+
+        // 绘制磁盘存储
+        function drawDiskStorage() {
+            const x = 650;
+            const y = 80;
+            const width = 250;
+            const height = 150;
+            
+            // 磁盘边框
+            ctx.strokeStyle = '#9c27b0';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
+            
+            // 磁盘标题
+            ctx.fillStyle = '#9c27b0';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Disk Storage', x + width/2, y - 10);
+            
+            // 绘制数据页
+            const pageSize = 25;
+            const cols = 6;
+            const rows = 4;
+            
+            // 根据当前步骤确定已刷新页面
+            let flushedPages = 0;
+            if (currentStep > 1) {
+                flushedPages = Math.min(cols * rows, (currentStep - 1) * 4);
+            }
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const pageX = x + 10 + col * (pageSize + 5);
+                    const pageY = y + 10 + row * (pageSize + 5);
+                    const pageIndex = row * cols + col;
+                    const isFlushed = pageIndex < flushedPages;
+                    
+                    // 绘制页面
+                    ctx.fillStyle = isFlushed ? '#e1bee7' : '#f3e5f5';
+                    ctx.fillRect(pageX, pageY, pageSize, pageSize);
+                    
+                    // 页面边框
+                    ctx.strokeStyle = '#7b1fa2';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(pageX, pageY, pageSize, pageSize);
+                    
+                    // 已刷新标记
+                    if (isFlushed) {
+                        ctx.fillStyle = '#7b1fa2';
+                        ctx.font = '10px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('✓', pageX + pageSize/2, pageY + pageSize/2);
+                    }
+                }
+            }
+            
+            // 显示刷新进度
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`已刷新: ${flushedPages}/${cols * rows}页`, x, y + height + 15);
+        }
+
+        // 绘制步骤说明
+        function drawStepDescription(steps) {
+            const x = 50;
+            const y = 280;
+            const stepWidth = 150;
+            
+            for (let i = 0; i < steps.length; i++) {
+                const step = steps[i];
+                const stepX = x + i * (stepWidth + 20);
+                
+                // 步骤框
+                ctx.fillStyle = i < currentStep ? checkpointTypes[currentCheckpointType].color : '#e0e0e0';
+                ctx.fillRect(stepX, y, stepWidth, 60);
+                
+                // 步骤边框
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(stepX, y, stepWidth, 60);
+                
+                // 步骤编号
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`步骤 ${step.id}`, stepX + stepWidth/2, y + 20);
+                
+                // 步骤标题
+                ctx.fillStyle = '#333';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(step.title, stepX + stepWidth/2, y + 40);
+            }
+        }
+
+        // 绘制数据流动
+        function drawDataFlow(steps) {
+            // 绘制Buffer Pool到磁盘的箭头
+            if (currentStep >= 3) {
+                ctx.strokeStyle = '#ff9800';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(300, 155); // Buffer Pool右侧
+                ctx.lineTo(650, 155); // 磁盘左侧
+                ctx.stroke();
+                
+                // 绘制箭头
+                drawArrow(650, 155, 645, 155);
+                
+                // 绘制文本
+                ctx.fillStyle = '#ff9800';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('脏页刷新', 475, 150);
+            }
+            
+            // 绘制Redo Log到Buffer Pool的箭头
+            if (currentStep >= 1) {
+                ctx.strokeStyle = '#4caf50';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(350, 200); // Redo Log左侧
+                ctx.lineTo(300, 200); // Buffer Pool右侧
+                ctx.stroke();
+                
+                // 绘制箭头
+                drawArrow(300, 200, 295, 200);
+                
+                // 绘制文本
+                ctx.fillStyle = '#4caf50';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Redo应用', 325, 195);
+            }
+        }
+
+        // 绘制箭头
+        function drawArrow(x, y, prevX, prevY) {
+            const angle = Math.atan2(y - prevY, x - prevX);
+            const headLength = 10;
+            
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(
+                x - headLength * Math.cos(angle - Math.PI / 6),
+                y - headLength * Math.sin(angle - Math.PI / 6)
+            );
+            ctx.lineTo(
+                x - headLength * Math.cos(angle + Math.PI / 6),
+                y - headLength * Math.sin(angle + Math.PI / 6)
+            );
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // 生成时间线
+        function generateTimeline() {
+            const type = checkpointTypes[currentCheckpointType];
+            checkpointTimeline.innerHTML = '';
+            
+            type.steps.forEach(step => {
+                const timelineItem = document.createElement('div');
+                timelineItem.className = 'timeline-item';
+                if (step.id <= currentStep) {
+                    timelineItem.classList.add('active');
+                }
+                timelineItem.innerHTML = `
+                    <div>
+                        <span class="timeline-step">${step.id}</span>
+                        <span class="timeline-title">${step.title}</span>
+                    </div>
+                    <div class="timeline-description">${step.description}</div>
+                `;
+                checkpointTimeline.appendChild(timelineItem);
+            });
+        }
+
+        // 更新技术详情
+        function updateTechnicalDetails() {
+            const type = checkpointTypes[currentCheckpointType];
+            
+            technicalDetails.innerHTML = `
+                <h3>${type.title}技术详情</h3>
+                ${type.steps.map(step => `
+                    <div class="detail-item">
+                        <div class="detail-title">${step.id}. ${step.title}</div>
+                        <div class="detail-description">${step.description}</div>
+                    </div>
+                `).join('')}
+                <div class="detail-item">
+                    <div class="detail-title">技术特点</div>
+                    <div class="detail-description">${type.characteristics}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-title">适用场景</div>
+                    <div class="detail-description">${type.description}</div>
+                </div>
+            `;
+        }
+
+        // 更新性能指标
+        function updatePerformanceMetrics() {
+            let dirtyRatio = 75;
+            let checkpointAgeVal = 45;
+            let flushRateVal = 200;
+            let redoUsage = 65;
+            
+            if (currentStep > 0) {
+                switch(currentCheckpointType) {
+                    case 'sharp':
+                        dirtyRatio = Math.max(10, 75 - currentStep * 15);
+                        checkpointAgeVal = Math.max(5, 45 - currentStep * 10);
+                        flushRateVal = 500 + currentStep * 100;
+                        redoUsage = Math.max(10, 65 - currentStep * 12);
+                        break;
+                    case 'fuzzy':
+                        dirtyRatio = Math.max(30, 75 - currentStep * 10);
+                        checkpointAgeVal = Math.max(20, 45 - currentStep * 5);
+                        flushRateVal = 200 + currentStep * 50;
+                        redoUsage = Math.max(30, 65 - currentStep * 8);
+                        break;
+                    case 'async':
+                        dirtyRatio = 75 - currentStep * 8;
+                        checkpointAgeVal = 45 - currentStep * 7;
+                        flushRateVal = 300 + currentStep * 60;
+                        redoUsage = Math.max(15, 65 - currentStep * 10);
+                        break;
+                    case 'sync':
+                        dirtyRatio = Math.max(20, 75 - currentStep * 12);
+                        checkpointAgeVal = 45 - currentStep * 8;
+                        flushRateVal = 250 + currentStep * 70;
+                        redoUsage = 65 - currentStep * 9;
+                        break;
+                }
+            }
+            
+            dirtyPageRatio.textContent = `${Math.round(dirtyRatio)}%`;
+            checkpointAge.textContent = `${Math.round(checkpointAgeVal)}%`;
+            flushRate.innerHTML = `${Math.round(flushRateVal)}<span class="metric-unit">页/秒</span>`;
+            redoLogUsage.textContent = `${Math.round(redoUsage)}%`;
+        }
+
+        // 开始Checkpoint流程
+        function startCheckpointFlow() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            isRunning = true;
+            currentStep = 0;
+            drawCheckpointFlow();
+            generateTimeline();
+            updatePerformanceMetrics();
+            
+            animationInterval = setInterval(() => {
+                currentStep++;
+                if (currentStep > checkpointTypes[currentCheckpointType].steps.length) {
+                    clearInterval(animationInterval);
+                    isRunning = false;
+                    return;
+                }
+                drawCheckpointFlow();
+                generateTimeline();
+                updatePerformanceMetrics();
+            }, 1500);
+        }
+
+        // 重置Checkpoint流程
+        function resetCheckpointFlow() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+            
+            isRunning = false;
+            currentStep = 0;
+            drawCheckpointFlow();
+            generateTimeline();
+            updatePerformanceMetrics();
+        }
+
+        // 切换Checkpoint类型
+        function switchCheckpointType(type) {
+            // 更新当前类型
+            currentCheckpointType = type;
+            
+            // 更新卡片选中状态
+            typeCards.forEach(card => {
+                if (card.dataset.type === type) {
+                    card.classList.add('active');
+                } else {
+                    card.classList.remove('active');
+                }
+            });
+            
+            // 重置流程
+            resetCheckpointFlow();
+            
+            // 更新详情
+            updateTechnicalDetails();
+        }
+
+        // 初始化
+        function init() {
+            // 初始化画布大小
+            initCanvasSize();
+            
+            // 初始绘制
+            drawCheckpointFlow();
+            
+            // 生成时间线
+            generateTimeline();
+            
+            // 初始化性能指标
+            updatePerformanceMetrics();
+            
+            // 绑定卡片点击事件
+            typeCards.forEach(card => {
+                card.addEventListener('click', () => {
+                    switchCheckpointType(card.dataset.type);
+                });
+            });
+            
+            // 绑定按钮事件
+            startCheckpointBtn.addEventListener('click', startCheckpointFlow);
+            resetBtn.addEventListener('click', resetCheckpointFlow);
+            
+            // 窗口大小变化时调整画布
+            window.addEventListener('resize', () => {
+                initCanvasSize();
+                drawCheckpointFlow();
+            });
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL Server层SVG架构图 - SQL处理核心</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0c1e29 0%, #1a2c3b 100%);
+            color: #e0f2fe;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 25px;
+            background: rgba(10, 30, 50, 0.9);
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+            border-left: 6px solid #ff6b6b;
+        }
+        
+        h1 {
+            font-size: 2.4rem;
+            margin-bottom: 15px;
+            background: linear-gradient(to right, #ff6b6b, #ffa726);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            color: #a5d8ff;
+            max-width: 900px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+        
+        .svg-container {
+            background: rgba(10, 30, 50, 0.9);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+            border-top: 1px solid rgba(255, 107, 107, 0.3);
+            min-height: 700px;
+            overflow: auto;
+        }
+        
+        svg {
+            display: block;
+            width: 100%;
+            height: 650px;
+            background: #0a1e32;
+            border-radius: 8px;
+        }
+        
+        .controls-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+        }
+        
+        .panel-left, .panel-right {
+            flex: 1;
+            min-width: 300px;
+            background: rgba(10, 30, 50, 0.9);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+            border-top: 1px solid rgba(255, 107, 107, 0.3);
+        }
+        
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #ffa726;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255, 167, 38, 0.3);
+        }
+        
+        .component-list {
+            list-style: none;
+            margin-bottom: 25px;
+        }
+        
+        .component-list li {
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, rgba(255, 107, 107, 0.1), rgba(255, 167, 38, 0.1));
+            border-radius: 8px;
+            border-left: 4px solid #ffa726;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+        }
+        
+        .component-list li:hover {
+            background: linear-gradient(90deg, rgba(255, 107, 107, 0.2), rgba(255, 167, 38, 0.2));
+            transform: translateX(5px);
+        }
+        
+        .component-list li.active {
+            background: linear-gradient(90deg, rgba(255, 107, 107, 0.3), rgba(255, 167, 38, 0.3));
+            border-left-color: #ff6b6b;
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.2);
+        }
+        
+        .component-id {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            background: #ff6b6b;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            margin-right: 12px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+        
+        .component-info {
+            flex-grow: 1;
+        }
+        
+        .component-name {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 3px;
+        }
+        
+        .component-type {
+            font-size: 0.85rem;
+            color: #ffcc80;
+            background: rgba(255, 107, 107, 0.2);
+            padding: 2px 8px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 14px;
+            background: linear-gradient(to right, #ff6b6b, #ffa726);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(255, 107, 107, 0.4);
+        }
+        
+        .details-content {
+            line-height: 1.7;
+            color: #cae9ff;
+            font-size: 0.95rem;
+        }
+        
+        .details-content h3 {
+            font-size: 1.3rem;
+            color: #ffa726;
+            margin-bottom: 15px;
+        }
+        
+        .details-content p {
+            margin-bottom: 15px;
+        }
+        
+        .details-content ul {
+            padding-left: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .details-content li {
+            margin-bottom: 8px;
+            position: relative;
+            padding-left: 10px;
+        }
+        
+        .details-content li:before {
+            content: "→";
+            color: #ff6b6b;
+            position: absolute;
+            left: -15px;
+        }
+        
+        .highlight {
+            color: #ffcc80;
+            font-weight: bold;
+        }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+        
+        .legend-color {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            margin-right: 8px;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: #88ccff;
+            font-size: 0.9rem;
+            border-top: 1px solid rgba(136, 204, 255, 0.2);
+        }
+        
+        .sql-example {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 40, 80, 0.3);
+            border-radius: 8px;
+            border-left: 4px solid #4facfe;
+        }
+        
+        .sql-example h3 {
+            color: #4facfe;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+        
+        .sql-code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Consolas', monospace;
+            color: #ffcc80;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+        
+        /* SVG元素样式 */
+        .component-rect {
+            stroke-width: 2;
+            stroke-linejoin: round;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .component-rect:hover {
+            filter: brightness(1.2);
+            stroke-width: 3;
+        }
+        
+        .component-rect.active {
+            filter: brightness(1.3);
+            stroke-width: 3;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .connection-line {
+            stroke-width: 2;
+            stroke: rgba(255, 255, 255, 0.4);
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+        
+        .connection-line.dashed {
+            stroke-dasharray: 5,5;
+        }
+        
+        .connection-line.highlighted {
+            stroke: rgba(255, 56, 96, 0.7);
+            stroke-width: 3;
+        }
+        
+        .connection-label {
+            fill: #e0f2fe;
+            font-size: 11px;
+            font-family: 'Segoe UI', sans-serif;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+        
+        .region-label {
+            fill: #ffa726;
+            font-size: 14px;
+            font-weight: bold;
+            font-family: 'Segoe UI', sans-serif;
+            text-anchor: middle;
+        }
+        
+        .region-rect {
+            fill: rgba(255, 107, 107, 0.1);
+            stroke: rgba(255, 167, 38, 0.3);
+            stroke-width: 2;
+            stroke-dasharray: 4,4;
+        }
+        
+        .title-text {
+            fill: #ffa726;
+            font-size: 22px;
+            font-weight: bold;
+            font-family: 'Segoe UI', sans-serif;
+            text-anchor: middle;
+        }
+        
+        .subtitle-text {
+            fill: #ffcc80;
+            font-size: 14px;
+            font-family: 'Segoe UI', sans-serif;
+            text-anchor: middle;
+        }
+        
+        @keyframes pulse {
+            0% { filter: brightness(1.3); }
+            50% { filter: brightness(1.5); }
+            100% { filter: brightness(1.3); }
+        }
+        
+        @media (max-width: 1200px) {
+            .controls-panel {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MySQL Server层SVG架构图 - SQL处理核心</h1>
+            <p class="subtitle">MySQL Server层是所有存储引擎通用的SQL处理逻辑层，负责将SQL转换为存储引擎操作指令，是SQL处理的"大脑"。使用SVG绘制，确保清晰度和交互性。</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="svg-container">
+                <svg id="mysqlSvg" viewBox="0 0 1400 650" preserveAspectRatio="xMidYMid meet">
+                    <!-- 定义箭头标记 -->
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                                refX="9" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="rgba(255, 255, 255, 0.4)"/>
+                        </marker>
+                        <marker id="arrowhead-highlighted" markerWidth="10" markerHeight="7" 
+                                refX="9" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="rgba(255, 56, 96, 0.7)"/>
+                        </marker>
+                        <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+                            <feOffset dx="2" dy="2" result="offsetblur"/>
+                            <feComponentTransfer>
+                                <feFuncA type="linear" slope="0.5"/>
+                            </feComponentTransfer>
+                            <feMerge> 
+                                <feMergeNode/>
+                                <feMergeNode in="SourceGraphic"/> 
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    
+                    <!-- 标题区域 -->
+                    <rect x="0" y="0" width="1400" height="70" fill="rgba(10, 30, 50, 0.9)"/>
+                    <line x1="0" x2="1400" y1="70" y2="70" stroke="rgba(255, 167, 38, 0.5)" stroke-width="2"/>
+                    <text class="title-text" x="700" y="35">MySQL Server层架构图 - SQL处理核心</text>
+                    <text class="subtitle-text" x="700" y="60">SQL接口 · 解析器 · 优化器 · 执行器 · Binlog模块</text>
+                    
+                    <!-- 网格背景 -->
+                    <g id="grid" opacity="0.05">
+                        <!-- 垂直线 -->
+                        <g stroke="rgba(255, 107, 107, 0.2)" stroke-width="1">
+                            <line x1="100" x2="100" y1="70" y2="620"/>
+                            <line x1="200" x2="200" y1="70" y2="620"/>
+                            <line x1="300" x2="300" y1="70" y2="620"/>
+                            <line x1="400" x2="400" y1="70" y2="620"/>
+                            <line x1="500" x2="500" y1="70" y2="620"/>
+                            <line x1="600" x2="600" y1="70" y2="620"/>
+                            <line x1="700" x2="700" y1="70" y2="620"/>
+                            <line x1="800" x2="800" y1="70" y2="620"/>
+                            <line x1="900" x2="900" y1="70" y2="620"/>
+                            <line x1="1000" x2="1000" y1="70" y2="620"/>
+                            <line x1="1100" x2="1100" y1="70" y2="620"/>
+                            <line x1="1200" x2="1200" y1="70" y2="620"/>
+                            <line x1="1300" x2="1300" y1="70" y2="620"/>
+                        </g>
+                        <!-- 水平线 -->
+                        <g stroke="rgba(255, 107, 107, 0.2)" stroke-width="1">
+                            <line x1="0" x2="1400" y1="100" y2="100"/>
+                            <line x1="0" x2="1400" y1="150" y2="150"/>
+                            <line x1="0" x2="1400" y1="200" y2="200"/>
+                            <line x1="0" x2="1400" y1="250" y2="250"/>
+                            <line x1="0" x2="1400" y1="300" y2="300"/>
+                            <line x1="0" x2="1400" y1="350" y2="350"/>
+                            <line x1="0" x2="1400" y1="400" y2="400"/>
+                            <line x1="0" x2="1400" y1="450" y2="450"/>
+                            <line x1="0" x2="1400" y1="500" y2="500"/>
+                            <line x1="0" x2="1400" y1="550" y2="550"/>
+                            <line x1="0" x2="1400" y1="600" y2="600"/>
+                        </g>
+                    </g>
+                    
+                    <!-- 区域划分 -->
+                    <g id="regions">
+                        <rect class="region-rect" x="60" y="80" width="220" height="30"/>
+                        <text class="region-label" x="170" y="100">客户端接口</text>
+                        
+                        <rect class="region-rect" x="300" y="80" width="220" height="30"/>
+                        <text class="region-label" x="410" y="100">SQL解析</text>
+                        
+                        <rect class="region-rect" x="540" y="80" width="220" height="30"/>
+                        <text class="region-label" x="650" y="100">查询优化</text>
+                        
+                        <rect class="region-rect" x="780" y="80" width="220" height="30"/>
+                        <text class="region-label" x="890" y="100">执行与缓存</text>
+                        
+                        <rect class="region-rect" x="1020" y="80" width="220" height="30"/>
+                        <text class="region-label" x="1130" y="100">日志与接口</text>
+                        
+                        <rect class="region-rect" x="1260" y="80" width="220" height="30"/>
+                        <text class="region-label" x="1370" y="100">存储引擎</text>
+                    </g>
+                    
+                    <!-- 连接线 -->
+                    <g id="connections">
+                        <!-- 连接线将通过JavaScript动态生成 -->
+                    </g>
+                    
+                    <!-- 组件 -->
+                    <g id="components">
+                        <!-- 组件将通过JavaScript动态生成 -->
+                    </g>
+                </svg>
+            </div>
+            
+            <div class="controls-panel">
+                <div class="panel-left">
+                    <h2>Server层组件</h2>
+                    <ul class="component-list" id="componentList">
+                        <!-- 组件列表将通过JavaScript动态生成 -->
+                    </ul>
+                    
+                    <div class="btn-group">
+                        <button id="animateBtn" class="btn">演示SQL处理流程</button>
+                        <button id="resetBtn" class="btn">重置视图</button>
+                    </div>
+                    
+                    <div class="sql-example">
+                        <h3>SQL处理示例</h3>
+                        <p>SELECT * FROM users WHERE id = 1 AND status = 'active';</p>
+                        <div class="sql-code">
+                            1. SQL接口接收查询<br>
+                            2. 解析器生成AST<br>
+                            3. 优化器选择索引<br>
+                            4. 执行器调用InnoDB API<br>
+                            5. 返回结果给客户端
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel-right">
+                    <h2>组件详情</h2>
+                    <div class="details-content" id="detailContent">
+                        <p>MySQL Server层是SQL处理的"大脑"，负责将SQL转换为存储引擎操作指令。所有存储引擎通用的逻辑处理都在这一层完成。</p>
+                        <p>Server层的主要功能包括：<span class="highlight">SQL解析</span>、<span class="highlight">查询优化</span>、<span class="highlight">执行调度</span>和<span class="highlight">事务管理</span>。</p>
+                        <p>Server层通过统一的存储引擎API与InnoDB等存储引擎交互，实现了存储引擎的可插拔架构。</p>
+                        <p>点击左侧组件查看详细说明。</p>
+                    </div>
+                    
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #ff6b6b;"></div>
+                            <span>SQL接口层</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #ffa726;"></div>
+                            <span>查询解析</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #4facfe;"></div>
+                            <span>优化与执行</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #00c6ff;"></div>
+                            <span>存储引擎接口</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #00f2fe;"></div>
+                            <span>日志与缓存</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>MySQL Server层SVG架构图 | SQL接口 · 解析器 · 优化器 · 执行器 · Binlog | SQL处理核心</p>
+        </footer>
+    </div>
+
+    <script>
+        // 组件数据 - MySQL Server层架构
+        const components = [
+            // 第1列：客户端接口
+            { 
+                id: 1, 
+                name: "客户端连接", 
+                type: "interface",
+                color: "#ff6b6b",
+                description: "来自连接层的客户端连接，提供SQL查询请求和接收处理结果。每个连接对应一个用户会话，包含会话状态和变量。",
+                details: [
+                    "接收客户端SQL查询请求（DML/DDL/DQL/DCL）",
+                    "维护用户会话状态和变量",
+                    "处理连接超时和中断",
+                    "返回查询结果和状态信息"
+                ],
+                x: 80, y: 150, width: 160, height: 90
+            },
+            { 
+                id: 2, 
+                name: "SQL接口", 
+                type: "interface",
+                color: "#ff6b6b",
+                description: "接收各种SQL语句，统一封装为'引擎无关的操作指令'，转发给执行器。处理SQL语句的分类和初步验证。",
+                details: [
+                    "接收DML(INSERT/UPDATE/DELETE)、DDL(CREATE/ALTER)、DQL(SELECT)、DCL(GRANT/REVOKE)语句",
+                    "统一封装为'引擎无关的操作指令'",
+                    "例如：INSERT语句转为'请求InnoDB插入行+加锁+记录日志'指令",
+                    "初步验证SQL语句类型和基本格式"
+                ],
+                x: 80, y: 280, width: 160, height: 90
+            },
+            
+            // 第2列：解析器
+            { 
+                id: 3, 
+                name: "词法分析", 
+                type: "parser",
+                color: "#ffa726",
+                description: "将SQL语句拆分为Token序列，识别关键字、标识符、运算符等基本语法单元。",
+                details: [
+                    "拆分SQL为Token序列",
+                    "识别关键字：SELECT, FROM, WHERE等",
+                    "识别标识符：表名、列名",
+                    "识别字面量：数字、字符串",
+                    "识别运算符：=, >, <等"
+                ],
+                x: 300, y: 120, width: 160, height: 90
+            },
+            { 
+                id: 4, 
+                name: "语法分析", 
+                type: "parser",
+                color: "#ffa726",
+                description: "根据MySQL语法规则验证Token序列，生成抽象语法树(AST)，检查语法合法性。",
+                details: [
+                    "验证SQL语法合法性",
+                    "生成抽象语法树(AST)",
+                    "检查InnoDB外键语法等约束",
+                    "报告语法错误位置和类型",
+                    "输出结构化的'待执行操作树'"
+                ],
+                x: 300, y: 240, width: 160, height: 90
+            },
+            { 
+                id: 5, 
+                name: "预处理", 
+                type: "parser",
+                color: "#ffa726",
+                description: "对AST进行语义分析和预处理，包括名称解析、权限初步检查、视图展开等。",
+                details: [
+                    "名称解析：验证表名、列名是否存在",
+                    "权限初步检查",
+                    "视图展开：将视图引用替换为底层查询",
+                    "常量表达式求值"
+                ],
+                x: 300, y: 360, width: 160, height: 90
+            },
+            
+            // 第3列：优化器
+            { 
+                id: 6, 
+                name: "成本计算", 
+                type: "optimizer",
+                color: "#4facfe",
+                description: "基于成本的优化器(CBO)，计算不同执行计划的IO成本和CPU成本，依赖InnoDB提供的索引统计信息。",
+                details: [
+                    "计算IO成本：从磁盘读取数据页的开销",
+                    "计算CPU成本：数据处理和比较的开销",
+                    "依赖InnoDB索引统计信息(cardinality)",
+                    "评估不同索引的选择性",
+                    "考虑数据分布和缓存命中率"
+                ],
+                x: 520, y: 120, width: 160, height: 90
+            },
+            { 
+                id: 7, 
+                name: "计划选择", 
+                type: "optimizer",
+                color: "#4facfe",
+                description: "基于成本计算选择最优执行计划，包括索引选择、连接顺序、连接算法等决策。",
+                details: [
+                    "选择主键索引 vs 二级索引",
+                    "决定连接顺序(多表查询时)",
+                    "选择连接算法：嵌套循环 vs 哈希连接",
+                    "决定是否使用覆盖索引",
+                    "考虑索引下推等优化技术"
+                ],
+                x: 520, y: 240, width: 160, height: 90
+            },
+            { 
+                id: 8, 
+                name: "计划生成", 
+                type: "optimizer",
+                color: "#4facfe",
+                description: "生成最终的执行计划，包括操作符树、访问路径、连接方法等详细信息。",
+                details: [
+                    "生成操作符树(operator tree)",
+                    "确定数据访问路径(access path)",
+                    "指定连接方法和顺序",
+                    "生成可执行的查询计划",
+                    "处理子查询和派生表优化"
+                ],
+                x: 520, y: 360, width: 160, height: 90
+            },
+            
+            // 第4列：执行器和元数据
+            { 
+                id: 9, 
+                name: "执行器", 
+                type: "executor",
+                color: "#00c6ff",
+                description: "按照执行计划调用存储引擎API，是Server层与InnoDB的'直接交互层'，处理锁等待和结果过滤。",
+                details: [
+                    "调用存储引擎API(ha_innodb::read_row/update_row)",
+                    "处理锁等待和超时(lock wait timeout)",
+                    "二次过滤和计算WHERE条件",
+                    "处理聚合和排序操作",
+                    "返回结果给客户端"
+                ],
+                x: 740, y: 150, width: 160, height: 90
+            },
+            { 
+                id: 10, 
+                name: "元数据缓存", 
+                type: "cache",
+                color: "#00f2fe",
+                description: "缓存表结构、权限、字符集等元数据，避免每次查询都读磁盘，提高系统性能。",
+                details: [
+                    "缓存表结构(information_schema)",
+                    "缓存用户权限信息",
+                    "缓存字符集和排序规则",
+                    "InnoDB表索引定义缓存",
+                    "DDL操作时刷新缓存"
+                ],
+                x: 740, y: 280, width: 160, height: 90
+            },
+            
+            // 第5列：Binlog和存储引擎
+            { 
+                id: 11, 
+                name: "Binlog模块", 
+                type: "log",
+                color: "#00f2fe",
+                description: "Server层的'逻辑日志'，记录数据变更操作，用于主从复制和数据恢复。通过两阶段提交保证与redo log的一致性。",
+                details: [
+                    "格式：STATEMENT(SQL语句)、ROW(行变更)、MIXED(混合)",
+                    "默认ROW格式，最安全",
+                    "用于主从复制和数据恢复",
+                    "两阶段提交保证与redo log一致性",
+                    "事务提交时写入"
+                ],
+                x: 960, y: 150, width: 160, height: 90
+            },
+            { 
+                id: 12, 
+                name: "存储引擎API", 
+                type: "engine",
+                color: "#00c6ff",
+                description: "统一的存储引擎接口，定义存储引擎必须实现的函数，如读写行、索引操作、事务控制等。",
+                details: [
+                    "定义存储引擎通用接口",
+                    "ha_innodb::read_row - 读取行数据",
+                    "ha_innodb::write_row - 写入行数据",
+                    "ha_innodb::update_row - 更新行数据",
+                    "ha_innodb::delete_row - 删除行数据"
+                ],
+                x: 960, y: 280, width: 160, height: 90
+            },
+            
+            // 第6列：存储引擎
+            { 
+                id: 13, 
+                name: "InnoDB引擎", 
+                type: "engine",
+                color: "#00c6ff",
+                description: "MySQL默认的存储引擎，提供事务支持、行级锁、外键约束、崩溃恢复等高级特性。",
+                details: [
+                    "支持ACID事务",
+                    "行级锁和MVCC(多版本并发控制)",
+                    "外键约束支持",
+                    "聚簇索引组织表",
+                    "redo log和undo log"
+                ],
+                x: 1180, y: 150, width: 160, height: 90
+            },
+            { 
+                id: 14, 
+                name: "索引统计信息", 
+                type: "engine",
+                color: "#00c6ff",
+                description: "InnoDB维护的索引统计信息，包括索引基数(cardinality)、数据分布等，供优化器进行成本估算。",
+                details: [
+                    "索引基数(cardinality)统计",
+                    "数据分布直方图(MySQL 8.0+)",
+                    "统计信息自动更新",
+                    "ANALYZE TABLE手动更新",
+                    "统计信息不准导致'选错索引'问题"
+                ],
+                x: 1180, y: 280, width: 160, height: 90
+            }
+        ];
+        
+        // 连接线数据
+        const connections = [
+            // 客户端到SQL接口
+            { from: 1, to: 2, label: "SQL查询", type: "query", dashed: false, curve: false },
+            
+            // SQL接口到解析器
+            { from: 2, to: 3, label: "SQL文本", type: "parse", dashed: false, curve: false },
+            
+            // 解析器内部流程
+            { from: 3, to: 4, label: "Token序列", type: "parse", dashed: false, curve: false },
+            { from: 4, to: 5, label: "AST", type: "parse", dashed: false, curve: false },
+            
+            // 解析器到优化器
+            { from: 5, to: 6, label: "操作树", type: "optimize", dashed: false, curve: false },
+            
+            // 优化器内部流程
+            { from: 6, to: 7, label: "成本估算", type: "optimize", dashed: false, curve: false },
+            { from: 7, to: 8, label: "决策结果", type: "optimize", dashed: false, curve: false },
+            
+            // 优化器到执行器
+            { from: 8, to: 9, label: "执行计划", type: "execute", dashed: false, curve: false },
+            
+            // 元数据缓存引用
+            { from: 10, to: 5, label: "表结构", type: "metadata", dashed: true, curve: false },
+            { from: 10, to: 6, label: "索引信息", type: "metadata", dashed: true, curve: false },
+            { from: 10, to: 9, label: "权限检查", type: "metadata", dashed: true, curve: false },
+            
+            // 执行器到存储引擎
+            { from: 9, to: 12, label: "引擎API调用", type: "engine", dashed: false, curve: false },
+            
+            // 存储引擎API到InnoDB
+            { from: 12, to: 13, label: "操作执行", type: "engine", dashed: false, curve: false },
+            
+            // InnoDB统计信息到优化器
+            { from: 14, to: 6, label: "统计信息", type: "stats", dashed: true, curve: false },
+            
+            // Binlog与执行器交互
+            { from: 9, to: 11, label: "逻辑日志", type: "log", dashed: false, curve: false },
+            
+            // InnoDB到Binlog（两阶段提交）
+            { from: 13, to: 11, label: "两阶段提交", type: "xcommit", dashed: true, curve: false },
+            
+            // 执行结果返回
+            { from: 9, to: 1, label: "查询结果", type: "result", dashed: true, curve: true }
+        ];
+        
+        // 当前选中的组件
+        let selectedComponent = null;
+        let animationInProgress = false;
+        
+        // 初始化组件列表
+        function initComponentList() {
+            const componentList = document.getElementById('componentList');
+            componentList.innerHTML = '';
+            
+            components.forEach(component => {
+                const li = document.createElement('li');
+                li.dataset.id = component.id;
+                li.innerHTML = `
+                    <div class="component-id">${component.id}</div>
+                    <div class="component-info">
+                        <div class="component-name">${component.name}</div>
+                        <div class="component-type">${component.type}</div>
+                    </div>
+                `;
+                
+                li.addEventListener('click', () => {
+                    if (animationInProgress) return;
+                    
+                    // 移除所有active类
+                    document.querySelectorAll('.component-list li').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    
+                    // 添加active类到当前项
+                    li.classList.add('active');
+                    
+                    // 选中组件
+                    selectComponent(component.id);
+                });
+                
+                componentList.appendChild(li);
+            });
+        }
+        
+        // 绘制所有组件
+        function drawComponents() {
+            const svgComponents = document.getElementById('components');
+            const svgConnections = document.getElementById('connections');
+            
+            // 清空现有内容
+            svgComponents.innerHTML = '';
+            svgConnections.innerHTML = '';
+            
+            // 绘制组件
+            components.forEach(component => {
+                drawComponent(component, svgComponents);
+            });
+            
+            // 绘制连接线
+            connections.forEach(connection => {
+                drawConnection(connection, svgConnections);
+            });
+        }
+        
+        // 绘制单个组件
+        function drawComponent(component, container) {
+            const isSelected = selectedComponent && selectedComponent.id === component.id;
+            
+            // 创建组件组
+            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            group.setAttribute('class', `component-group component-${component.id}`);
+            group.setAttribute('data-id', component.id);
+            
+            // 创建组件矩形
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', component.x);
+            rect.setAttribute('y', component.y);
+            rect.setAttribute('width', component.width);
+            rect.setAttribute('height', component.height);
+            rect.setAttribute('rx', '8');
+            rect.setAttribute('ry', '8');
+            rect.setAttribute('fill', component.color + (isSelected ? '33' : '22'));
+            rect.setAttribute('stroke', component.color);
+            rect.setAttribute('stroke-width', isSelected ? '3' : '2');
+            rect.setAttribute('class', `component-rect ${isSelected ? 'active' : ''}`);
+            
+            // 创建顶部装饰条
+            const topBar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            topBar.setAttribute('x', component.x);
+            topBar.setAttribute('y', component.y);
+            topBar.setAttribute('width', component.width);
+            topBar.setAttribute('height', '6');
+            topBar.setAttribute('fill', component.color);
+            
+            // 创建组件ID文本
+            const idText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            idText.setAttribute('x', component.x + 10);
+            idText.setAttribute('y', component.y + 20);
+            idText.setAttribute('fill', component.color);
+            idText.setAttribute('font-size', '11');
+            idText.setAttribute('font-weight', 'bold');
+            idText.setAttribute('font-family', 'Segoe UI, sans-serif');
+            idText.textContent = `#${component.id}`;
+            
+            // 创建组件名称文本
+            const nameLines = wrapText(component.name, component.width - 20, 13);
+            let lineHeight = 16;
+            nameLines.forEach((line, index) => {
+                const nameText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                nameText.setAttribute('x', component.x + component.width / 2);
+                nameText.setAttribute('y', component.y + 35 + index * lineHeight);
+                nameText.setAttribute('fill', isSelected ? '#ff3860' : '#e0f2fe');
+                nameText.setAttribute('font-size', '13');
+                nameText.setAttribute('font-weight', 'bold');
+                nameText.setAttribute('font-family', 'Segoe UI, sans-serif');
+                nameText.setAttribute('text-anchor', 'middle');
+                nameText.textContent = line;
+                group.appendChild(nameText);
+            });
+            
+            // 创建组件类型文本
+            const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            typeText.setAttribute('x', component.x + component.width / 2);
+            typeText.setAttribute('y', component.y + component.height - 18);
+            typeText.setAttribute('fill', component.color);
+            typeText.setAttribute('font-size', '11');
+            typeText.setAttribute('font-family', 'Segoe UI, sans-serif');
+            typeText.setAttribute('text-anchor', 'middle');
+            typeText.textContent = component.type.toUpperCase();
+            
+            // 添加点击事件
+            group.addEventListener('click', () => {
+                if (animationInProgress) return;
+                selectComponent(component.id);
+            });
+            
+            // 添加悬停效果
+            group.addEventListener('mouseenter', () => {
+                if (animationInProgress) return;
+                rect.setAttribute('filter', 'brightness(1.2)');
+            });
+            
+            group.addEventListener('mouseleave', () => {
+                if (animationInProgress) return;
+                if (!isSelected) {
+                    rect.removeAttribute('filter');
+                }
+            });
+            
+            // 添加元素到组
+            group.appendChild(rect);
+            group.appendChild(topBar);
+            group.appendChild(idText);
+            group.appendChild(typeText);
+            
+            // 添加组到容器
+            container.appendChild(group);
+        }
+        
+        // 文本换行函数
+        function wrapText(text, maxWidth, fontSize) {
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = words[0];
+            
+            // 创建临时SVG元素测量文本宽度
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const textElement = document.createElementNS(svgNS, 'text');
+            textElement.setAttribute('font-size', fontSize);
+            textElement.setAttribute('font-weight', 'bold');
+            textElement.setAttribute('font-family', 'Segoe UI, sans-serif');
+            document.getElementById('mysqlSvg').appendChild(textElement);
+            
+            for (let i = 1; i < words.length; i++) {
+                const word = words[i];
+                textElement.textContent = currentLine + " " + word;
+                const width = textElement.getComputedTextLength();
+                
+                if (width < maxWidth) {
+                    currentLine += " " + word;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            }
+            lines.push(currentLine);
+            
+            // 移除临时元素
+            document.getElementById('mysqlSvg').removeChild(textElement);
+            
+            return lines;
+        }
+        
+        // 绘制连接线
+        function drawConnection(conn, container) {
+            const fromComp = components.find(c => c.id === conn.from);
+            const toComp = components.find(c => c.id === conn.to);
+            
+            if (!fromComp || !toComp) return;
+            
+            // 检查连接是否涉及当前选中的组件
+            const isHighlighted = selectedComponent && 
+                (selectedComponent.id === conn.from || selectedComponent.id === conn.to);
+            
+            // 创建连接线组
+            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            group.setAttribute('class', `connection-group connection-${conn.from}-${conn.to}`);
+            
+            let path, labelX, labelY;
+            
+            if (conn.curve) {
+                // 绘制曲线连接线
+                const startX = fromComp.x + fromComp.width / 2;
+                const startY = fromComp.y + fromComp.height;
+                const endX = toComp.x + toComp.width / 2;
+                const endY = toComp.y;
+                
+                // 计算控制点
+                const cp1x = startX + 120;
+                const cp1y = startY + 80;
+                const cp2x = endX - 120;
+                const cp2y = endY - 80;
+                
+                // 创建路径
+                path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`);
+                
+                // 计算标签位置
+                const t = 0.5;
+                labelX = Math.pow(1-t,3)*startX + 3*Math.pow(1-t,2)*t*cp1x + 3*(1-t)*Math.pow(t,2)*cp2x + Math.pow(t,3)*endX;
+                labelY = Math.pow(1-t,3)*startY + 3*Math.pow(1-t,2)*t*cp1y + 3*(1-t)*Math.pow(t,2)*cp2y + Math.pow(t,3)*endY;
+            } else {
+                // 绘制直线连接线
+                const startX = fromComp.x + fromComp.width;
+                const startY = fromComp.y + fromComp.height / 2;
+                const endX = toComp.x;
+                const endY = toComp.y + toComp.height / 2;
+                
+                // 创建路径
+                path = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                path.setAttribute('x1', startX);
+                path.setAttribute('y1', startY);
+                path.setAttribute('x2', endX);
+                path.setAttribute('y2', endY);
+                
+                // 计算标签位置
+                labelX = (startX + endX) / 2;
+                labelY = (startY + endY) / 2;
+            }
+            
+            // 设置连接线样式
+            if (path.tagName === 'path') {
+                path.setAttribute('fill', 'none');
+            }
+            
+            path.setAttribute('stroke', isHighlighted ? 'rgba(255, 56, 96, 0.7)' : 'rgba(255, 255, 255, 0.4)');
+            path.setAttribute('stroke-width', isHighlighted ? '3' : '2');
+            path.setAttribute('class', `connection-line ${conn.dashed ? 'dashed' : ''} ${isHighlighted ? 'highlighted' : ''}`);
+            
+            if (conn.dashed) {
+                path.setAttribute('stroke-dasharray', '5,5');
+            }
+            
+            // 设置箭头标记
+            if (isHighlighted) {
+                path.setAttribute('marker-end', 'url(#arrowhead-highlighted)');
+            } else {
+                path.setAttribute('marker-end', 'url(#arrowhead)');
+            }
+            
+            // 创建标签
+            if (conn.label) {
+                const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                labelBg.setAttribute('x', labelX - 40);
+                labelBg.setAttribute('y', labelY - 20);
+                labelBg.setAttribute('width', 80);
+                labelBg.setAttribute('height', 20);
+                labelBg.setAttribute('rx', '4');
+                labelBg.setAttribute('ry', '4');
+                labelBg.setAttribute('fill', 'rgba(10, 30, 50, 0.9)');
+                
+                const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                labelText.setAttribute('x', labelX);
+                labelText.setAttribute('y', labelY - 5);
+                labelText.setAttribute('fill', isHighlighted ? '#ff3860' : '#e0f2fe');
+                labelText.setAttribute('font-size', '11');
+                labelText.setAttribute('font-family', 'Segoe UI, sans-serif');
+                labelText.setAttribute('text-anchor', 'middle');
+                labelText.textContent = conn.label;
+                
+                group.appendChild(labelBg);
+                group.appendChild(labelText);
+            }
+            
+            group.appendChild(path);
+            container.appendChild(group);
+        }
+        
+        // 选择组件
+        function selectComponent(id) {
+            selectedComponent = components.find(c => c.id === id);
+            
+            // 更新组件列表高亮
+            document.querySelectorAll('.component-list li').forEach(item => {
+                if (parseInt(item.dataset.id) === id) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+            
+            // 更新详情区域
+            document.getElementById('detailContent').innerHTML = `
+                <h3>${selectedComponent.name} (#${selectedComponent.id})</h3>
+                <p><strong>组件类型：</strong><span class="component-type">${selectedComponent.type}</span></p>
+                <p><strong>功能描述：</strong>${selectedComponent.description}</p>
+                <p><strong>主要功能：</strong></p>
+                <ul>
+                    ${selectedComponent.details.map(detail => `<li>${detail}</li>`).join('')}
+                </ul>
+                <p><strong>位置：</strong>${getRegionName(selectedComponent.x)}</p>
+            `;
+            
+            // 重绘画布
+            drawComponents();
+        }
+        
+        // 获取区域名称
+        function getRegionName(x) {
+            if (x < 200) return "客户端接口层";
+            if (x < 450) return "SQL解析层";
+            if (x < 700) return "查询优化层";
+            if (x < 900) return "执行与缓存层";
+            if (x < 1100) return "日志与接口层";
+            return "存储引擎层";
+        }
+        
+        // 演示SQL处理流程
+        function animateSQLProcess() {
+            if (animationInProgress) return;
+            animationInProgress = true;
+            
+            const steps = [
+                { compId: 1, delay: 600 },
+                { compId: 2, delay: 700 },
+                { compId: 3, delay: 700 },
+                { compId: 4, delay: 700 },
+                { compId: 5, delay: 700 },
+                { compId: 6, delay: 800 },
+                { compId: 7, delay: 800 },
+                { compId: 8, delay: 800 },
+                { compId: 9, delay: 900 },
+                { compId: 12, delay: 700 },
+                { compId: 13, delay: 700 },
+                { compId: 11, delay: 700 },
+                { compId: 9, delay: 700 },
+                { compId: 1, delay: 1000, final: true }
+            ];
+            
+            // 重置所有组件选中状态
+            selectedComponent = null;
+            drawComponents();
+            
+            // 执行动画步骤
+            let totalDelay = 0;
+            steps.forEach((step, index) => {
+                setTimeout(() => {
+                    if (step.compId) {
+                        const comp = components.find(c => c.id === step.compId);
+                        if (comp) {
+                            // 临时高亮组件
+                            selectedComponent = comp;
+                            drawComponents();
+                            
+                            // 更新组件列表高亮
+                            document.querySelectorAll('.component-list li').forEach(item => {
+                                if (parseInt(item.dataset.id) === comp.id) {
+                                    item.classList.add('active');
+                                } else {
+                                    item.classList.remove('active');
+                                }
+                            });
+                            
+                            // 如果是最后一步，恢复视图
+                            if (step.final) {
+                                setTimeout(() => {
+                                    selectedComponent = null;
+                                    drawComponents();
+                                    animationInProgress = false;
+                                    
+                                    // 重置组件列表高亮
+                                    document.querySelectorAll('.component-list li').forEach(item => {
+                                        item.classList.remove('active');
+                                    });
+                                    
+                                    // 恢复详情区域
+                                    document.getElementById('detailContent').innerHTML = `
+                                        <p>MySQL Server层是SQL处理的"大脑"，负责将SQL转换为存储引擎操作指令。所有存储引擎通用的逻辑处理都在这一层完成。</p>
+                                        <p>Server层的主要功能包括：<span class="highlight">SQL解析</span>、<span class="highlight">查询优化</span>、<span class="highlight">执行调度</span>和<span class="highlight">事务管理</span>。</p>
+                                        <p>Server层通过统一的存储引擎API与InnoDB等存储引擎交互，实现了存储引擎的可插拔架构。</p>
+                                        <p>点击左侧组件查看详细说明。</p>
+                                    `;
+                                }, 800);
+                            }
+                        }
+                    }
+                }, totalDelay);
+                
+                totalDelay += step.delay;
+            });
+        }
+        
+        // 初始化
+        function init() {
+            // 初始化组件列表
+            initComponentList();
+            
+            // 初始绘制
+            drawComponents();
+            
+            // 添加按钮事件
+            document.getElementById('animateBtn').addEventListener('click', animateSQLProcess);
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                if (animationInProgress) return;
+                
+                selectedComponent = null;
+                drawComponents();
+                
+                // 重置组件列表高亮
+                document.querySelectorAll('.component-list li').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                // 恢复详情区域
+                document.getElementById('detailContent').innerHTML = `
+                    <p>MySQL Server层是SQL处理的"大脑"，负责将SQL转换为存储引擎操作指令。所有存储引擎通用的逻辑处理都在这一层完成。</p>
+                    <p>Server层的主要功能包括：<span class="highlight">SQL解析</span>、<span class="highlight">查询优化</span>、<span class="highlight">执行调度</span>和<span class="highlight">事务管理</span>。</p>
+                    <p>Server层通过统一的存储引擎API与InnoDB等存储引擎交互，实现了存储引擎的可插拔架构。</p>
+                    <p>点击左侧组件查看详细说明。</p>
+                `;
+            });
+            
+            // 初始选择第一个组件
+            setTimeout(() => {
+                document.querySelector('.component-list li').click();
+            }, 500);
+        }
+        
+        // 页面加载完成后初始化
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

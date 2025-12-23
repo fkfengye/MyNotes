@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InnoDB磁盘架构设计原理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0c2461, #1e3799);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 15px;
+            background: linear-gradient(90deg, #00b894, #00cec9);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            max-width: 1000px;
+            margin: 0 auto;
+            line-height: 1.6;
+            color: #dfe6e9;
+        }
+        
+        .architecture-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .component-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            transition: all 0.4s ease;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .component-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .component-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+        }
+        
+        .component-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        
+        .component-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 20px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .component-icon i {
+            font-size: 28px;
+            color: white;
+        }
+        
+        .component-title {
+            flex: 1;
+        }
+        
+        .component-title h2 {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+            color: var(--color-primary);
+        }
+        
+        .component-title p {
+            font-size: 1rem;
+            color: #aaa;
+        }
+        
+        .design-principles {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            flex: 1;
+        }
+        
+        .principle-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .principle-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-5px);
+        }
+        
+        .principle-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(var(--color-primary-rgb), 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        
+        .principle-icon i {
+            color: var(--color-primary);
+            font-size: 18px;
+        }
+        
+        .principle-content h3 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        
+        .principle-content p {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #ccc;
+        }
+        
+        .visualization {
+            margin-top: 25px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            min-height: 200px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .visualization-title {
+            font-size: 1.1rem;
+            color: var(--color-primary);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .visualization-title i {
+            margin-right: 10px;
+        }
+        
+        .data-flow {
+            position: relative;
+            height: 120px;
+        }
+        
+        .flow-item {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(var(--color-primary-rgb), 0.1);
+            border: 2px solid rgba(var(--color-primary-rgb), 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .flow-item:hover {
+            background: rgba(var(--color-primary-rgb), 0.2);
+            border-color: var(--color-primary);
+            transform: scale(1.05);
+            z-index: 10;
+        }
+        
+        .flow-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(var(--color-primary-rgb), 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        
+        .flow-icon i {
+            color: var(--color-primary);
+            font-size: 20px;
+        }
+        
+        .flow-label {
+            font-size: 0.9rem;
+            text-align: center;
+            color: #fff;
+        }
+        
+        .flow-arrow {
+            position: absolute;
+            color: var(--color-primary);
+            font-size: 24px;
+        }
+        
+        .configuration {
+            margin-top: 25px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            border-left: 4px solid var(--color-primary);
+        }
+        
+        .configuration h3 {
+            color: var(--color-primary);
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+        
+        .config-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .config-item:last-child {
+            border-bottom: none;
+        }
+        
+        .config-key {
+            color: #ccc;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .config-value {
+            color: var(--color-primary);
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+        
+        /* 卡片颜色定义 */
+        .tablespace-card {
+            --color-primary: #3498db;
+            --color-secondary: #2980b9;
+            --color-primary-rgb: 52, 152, 219;
+        }
+        
+        .redo-card {
+            --color-primary: #e74c3c;
+            --color-secondary: #c0392b;
+            --color-primary-rgb: 231, 76, 60;
+        }
+        
+        .undo-card {
+            --color-primary: #2ecc71;
+            --color-secondary: #27ae60;
+            --color-primary-rgb: 46, 204, 113;
+        }
+        
+        .doublewrite-card {
+            --color-primary: #f39c12;
+            --color-secondary: #e67e22;
+            --color-primary-rgb: 243, 156, 18;
+        }
+        
+        .architecture-overview {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .overview-title {
+            text-align: center;
+            color: #00cec9;
+            font-size: 2rem;
+            margin-bottom: 30px;
+        }
+        
+        .overview-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+        
+        .overview-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 25px;
+            border-radius: 15px;
+            border-left: 4px solid;
+            transition: all 0.3s ease;
+        }
+        
+        .overview-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .overview-item h3 {
+            color: #fff;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+        
+        .overview-item p {
+            color: #ddd;
+            line-height: 1.7;
+            font-size: 0.95rem;
+        }
+        
+        @media (max-width: 1200px) {
+            .architecture-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .design-principles {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .component-header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .component-icon {
+                margin-right: 0;
+                margin-bottom: 15px;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>InnoDB磁盘架构设计原理</h1>
+            <p class="subtitle">深入解析MySQL InnoDB存储引擎如何通过精心设计的磁盘架构保证数据可靠性、持久性和高性能</p>
+        </header>
+        
+        <div class="architecture-grid">
+            <!-- 表空间设计 -->
+            <div class="component-card tablespace-card">
+                <div class="component-header">
+                    <div class="component-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="component-title">
+                        <h2>表空间设计</h2>
+                        <p>数据容器 - 组织和管理磁盘数据</p>
+                    </div>
+                </div>
+                
+                <div class="design-principles">
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-cogs"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>系统表空间(ibdata1)</h3>
+                            <p>存储元数据、Undo Log、Double Write Buffer。设计为"只增不减"，删除数据不释放空间。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>独立表空间(.ibd)</h3>
+                            <p>每表独立文件，drop table可释放空间。推荐开启innodb_file_per_table=1。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-layer-group"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>通用表空间</h3>
+                            <p>MySQL 5.7+引入，可容纳多张表，便于集中管理和优化。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-temp"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>临时表空间</h3>
+                            <p>存储临时表数据，MySQL重启时自动清空，不参与持久化。</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="visualization">
+                    <div class="visualization-title">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>表空间体系结构</span>
+                    </div>
+                    <div class="data-flow">
+                        <div class="flow-item" style="left: 0; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-cogs"></i>
+                            </div>
+                            <div class="flow-label">ibdata1</div>
+                        </div>
+                        <div class="flow-arrow" style="left: 120px; top: 50px;">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-item" style="left: 170px; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-file-alt"></i>
+                            </div>
+                            <div class="flow-label">.ibd文件</div>
+                        </div>
+                        <div class="flow-arrow" style="left: 290px; top: 50px;">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-item" style="left: 340px; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-layer-group"></i>
+                            </div>
+                            <div class="flow-label">通用空间</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="configuration">
+                    <h3>关键配置</h3>
+                    <div class="config-item">
+                        <div class="config-key">innodb_file_per_table</div>
+                        <div class="config-value">= 1 (推荐)</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-key">innodb_data_file_path</div>
+                        <div class="config-value">ibdata1:12M:autoextend</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-key">innodb_temp_data_file_path</div>
+                        <div class="config-value">ibtmp1:12M:autoextend</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Redo Log机制 -->
+            <div class="component-card redo-card">
+                <div class="component-header">
+                    <div class="component-icon">
+                        <i class="fas fa-redo-alt"></i>
+                    </div>
+                    <div class="component-title">
+                        <h2>Redo Log机制</h2>
+                        <p>持久性保证 - Write-Ahead Logging原则</p>
+                    </div>
+                </div>
+                
+                <div class="design-principles">
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-pen-fancy"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>WAL原则</h3>
+                            <p>Write-Ahead Logging，先写日志后写数据。确保事务提交时数据不会丢失。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>顺序写优势</h3>
+                            <p>Redo Log顺序写(快) vs 数据页随机写(慢)。大幅提升事务提交性能。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-heartbeat"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>崩溃恢复</h3>
+                            <p>通过Redo Log重做已提交但未刷盘的事务，保证崩溃后数据一致性。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-sort-numeric-up"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>LSN机制</h3>
+                            <p>Log Sequence Number，全局递增，标识日志位置。用于恢复和检查点。</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="visualization">
+                    <div class="visualization-title">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>Redo Log工作流程</span>
+                    </div>
+                    <div class="data-flow">
+                        <div class="flow-item" style="left: 0; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-edit"></i>
+                            </div>
+                            <div class="flow-label">事务修改</div>
+                        </div>
+                        <div class="flow-arrow" style="left: 120px; top: 50px;">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-item" style="left: 170px; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-file-signature"></i>
+                            </div>
+                            <div class="flow-label">写Redo</div>
+                        </div>
+                        <div class="flow-arrow" style="left: 290px; top: 50px;">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-item" style="left: 340px; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-hdd"></i>
+                            </div>
+                            <div class="flow-label">提交刷盘</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="configuration">
+                    <h3>关键配置</h3>
+                    <div class="config-item">
+                        <div class="config-key">innodb_log_file_size</div>
+                        <div class="config-value">= 256M - 2G</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-key">innodb_log_files_in_group</div>
+                        <div class="config-value">= 2</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-key">innodb_flush_log_at_trx_commit</div>
+                        <div class="config-value">= 1 (最安全)</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Undo Log与MVCC -->
+            <div class="component-card undo-card">
+                <div class="component-header">
+                    <div class="component-icon">
+                        <i class="fas fa-undo"></i>
+                    </div>
+                    <div class="component-title">
+                        <h2>Undo Log与MVCC</h2>
+                        <p>并发控制 - 多版本并发控制机制</p>
+                    </div>
+                </div>
+                
+                <div class="design-principles">
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-exchange-alt"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>回滚支持</h3>
+                            <p>记录修改前的数据，支持事务回滚。保证事务的原子性。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-code-branch"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>MVCC基础</h3>
+                            <p>通过版本链实现非锁定读。提高数据库并发性能。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-eye"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>Read View</h3>
+                            <p>事务可见性判断机制。确定事务能看见哪些数据版本。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-broom"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>Purge机制</h3>
+                            <p>异步清理不再需要的Undo Log。防止Undo空间无限增长。</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="visualization">
+                    <div class="visualization-title">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>MVCC版本链</span>
+                    </div>
+                    <div class="data-flow">
+                        <div class="flow-item" style="left: 0; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="flow-label">版本v1</div>
+                        </div>
+                        <div class="flow-arrow" style="left: 120px; top: 50px;">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-item" style="left: 170px; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="flow-label">版本v2</div>
+                        </div>
+                        <div class="flow-arrow" style="left: 290px; top: 50px;">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-item" style="left: 340px; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="flow-label">版本v3</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="configuration">
+                    <h3>关键配置</h3>
+                    <div class="config-item">
+                        <div class="config-key">innodb_undo_tablespaces</div>
+                        <div class="config-value">= 2 (默认)</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-key">innodb_undo_log_truncate</div>
+                        <div class="config-value">= 1 (启用)</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-key">innodb_max_undo_log_size</div>
+                        <div class="config-value">= 1G</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Double Write Buffer -->
+            <div class="component-card doublewrite-card">
+                <div class="component-header">
+                    <div class="component-icon">
+                        <i class="fas fa-copy"></i>
+                    </div>
+                    <div class="component-title">
+                        <h2>Double Write Buffer</h2>
+                        <p>数据完整性 - 防止部分写失效</p>
+                    </div>
+                </div>
+                
+                <div class="design-principles">
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>部分写问题</h3>
+                            <p>InnoDB页大小16KB，磁盘块大小4KB，可能部分写入导致数据损坏。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-sync-alt"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>双写流程</h3>
+                            <p>先写双写缓冲区，再写数据文件。确保数据页完整性。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-medkit"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>恢复机制</h3>
+                            <p>损坏页从双写缓冲区恢复完整副本。保证数据可靠性。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="principle-item">
+                        <div class="principle-icon">
+                            <i class="fas fa-balance-scale"></i>
+                        </div>
+                        <div class="principle-content">
+                            <h3>性能权衡</h3>
+                            <p>轻微性能损失换取数据完整性。生产环境必开。</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="visualization">
+                    <div class="visualization-title">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>双写流程</span>
+                    </div>
+                    <div class="data-flow">
+                        <div class="flow-item" style="left: 0; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-hdd"></i>
+                            </div>
+                            <div class="flow-label">数据页</div>
+                        </div>
+                        <div class="flow-arrow" style="left: 120px; top: 50px;">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-item" style="left: 170px; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-copy"></i>
+                            </div>
+                            <div class="flow-label">双写缓冲区</div>
+                        </div>
+                        <div class="flow-arrow" style="left: 290px; top: 50px;">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="flow-item" style="left: 340px; top: 10px;">
+                            <div class="flow-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div class="flow-label">数据文件</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="configuration">
+                    <h3>关键配置</h3>
+                    <div class="config-item">
+                        <div class="config-key">innodb_doublewrite</div>
+                        <div class="config-value">= 1 (默认开启)</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-key">innodb_doublewrite_dir</div>
+                        <div class="config-value">(双写文件目录)</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-key">innodb_doublewrite_files</div>
+                        <div class="config-value">= 2 (默认)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="architecture-overview">
+            <h2 class="overview-title">InnoDB磁盘架构设计原理总结</h2>
+            <div class="overview-content">
+                <div class="overview-item" style="border-left-color: #3498db;">
+                    <h3>表空间 - 数据组织</h3>
+                    <p>InnoDB通过多层次表空间设计，实现了数据的有序组织和高效管理。系统表空间作为核心容器，独立表空间提供灵活性和可维护性，通用表空间满足特殊管理需求，临时表空间处理临时数据，共同构建了完整的数据存储体系。</p>
+                </div>
+                
+                <div class="overview-item" style="border-left-color: #e74c3c;">
+                    <h3>Redo Log - 持久性保障</h3>
+                    <p>基于WAL原则，Redo Log通过顺序写日志后异步写数据的方式，在保证事务持久性的同时大幅提升性能。LSN机制和Checkpoint技术的结合，实现了高效的日志管理和崩溃恢复能力。</p>
+                </div>
+                
+                <div class="overview-item" style="border-left-color: #2ecc71;">
+                    <h3>Undo Log - 并发控制</h3>
+                    <p>Undo Log不仅支持事务回滚，更重要的是实现了MVCC多版本并发控制。通过版本链和Read View机制，InnoDB实现了高效的读写并发，避免了大量的锁竞争，提升了数据库整体性能。</p>
+                </div>
+                
+                <div class="overview-item" style="border-left-color: #f39c12;">
+                    <h3>Double Write - 数据完整性</h3>
+                    <p>针对部分写失效问题，Double Write Buffer通过双重写入机制，在轻微性能损失下保证了数据页的完整性。这是InnoDB在数据可靠性设计上的重要创新，确保了极端情况下的数据安全。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 为每个组件卡片添加交互效果
+        document.querySelectorAll('.component-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                const color = getComputedStyle(this).getPropertyValue('--color-primary');
+                this.style.boxShadow = `0 20px 50px ${color}40`;
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.boxShadow = '';
+            });
+        });
+        
+        // 为设计原则项添加点击效果
+        document.querySelectorAll('.principle-item').forEach(item => {
+            item.addEventListener('click', function() {
+                // 移除其他项的活动状态
+                this.parentElement.querySelectorAll('.principle-item').forEach(i => {
+                    i.style.background = '';
+                });
+                
+                // 设置当前项为活动状态
+                const color = getComputedStyle(this.closest('.component-card')).getPropertyValue('--color-primary-rgb');
+                this.style.background = `rgba(${color}, 0.15)`;
+                
+                // 显示相关详细信息
+                const title = this.querySelector('h3').textContent;
+                const content = this.querySelector('p').textContent;
+                
+                // 这里可以添加显示详细信息的逻辑
+                console.log(`设计原则: ${title}\n内容: ${content}`);
+            });
+        });
+        
+        // 为流程图项添加交互
+        document.querySelectorAll('.flow-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const label = this.querySelector('.flow-label').textContent;
+                const card = this.closest('.component-card');
+                const color = getComputedStyle(card).getPropertyValue('--color-primary');
+                
+                // 添加脉冲效果
+                this.style.boxShadow = `0 0 0 5px ${color}80`;
+                setTimeout(() => {
+                    this.style.boxShadow = '';
+                }, 500);
+                
+                // 显示相关信息
+                console.log(`流程节点: ${label}`);
+            });
+        });
+        
+        // 添加键盘导航支持
+        document.addEventListener('keydown', function(event) {
+            if (event.key === '1') {
+                document.querySelector('.tablespace-card').scrollIntoView({ behavior: 'smooth' });
+            } else if (event.key === '2') {
+                document.querySelector('.redo-card').scrollIntoView({ behavior: 'smooth' });
+            } else if (event.key === '3') {
+                document.querySelector('.undo-card').scrollIntoView({ behavior: 'smooth' });
+            } else if (event.key === '4') {
+                document.querySelector('.doublewrite-card').scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    </script>
+</body>
+</html>
