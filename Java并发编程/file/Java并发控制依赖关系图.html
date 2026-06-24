@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java并发控制依赖关系图</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 10px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border-radius: 4px;
+        }
+        .description {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-top: 30px;
+            line-height: 1.8;
+        }
+        .description h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .description ul {
+            padding-left: 20px;
+        }
+        .description li {
+            margin-bottom: 10px;
+        }
+        .layer-label {
+            font-weight: bold;
+            text-anchor: middle;
+            font-size: 16px;
+            fill: #2c3e50;
+        }
+        .node {
+            cursor: pointer;
+            transition: filter 0.3s;
+        }
+        .node:hover {
+            filter: brightness(1.1);
+        }
+        .dependency-line {
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+        .highlight {
+            stroke-width: 3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Java并发控制依赖关系图</h1>
+    
+    <div class="container">
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #4a6fa5;"></div>
+                <span>硬件层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #166088;"></div>
+                <span>原则/理论</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #95b8d1;"></div>
+                <span>JVM层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #4b8f8c;"></div>
+                <span>Java应用底层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #6a994e;"></div>
+                <span>Java应用中层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #bc4749;"></div>
+                <span>Java应用上层</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #a98467;"></div>
+                <span>线程同步工具</span>
+            </div>
+        </div>
+        
+        <svg id="dependencyGraph" width="1100" height="800"></svg>
+        
+        <div class="description">
+            <h3>依赖关系说明</h3>
+            <p>这张图展示了从硬件层到Java应用层的并发控制依赖关系：</p>
+            <ul>
+                <li><strong>自下而上依赖</strong>：上层组件依赖于下层提供的机制</li>
+                <li><strong>硬件层（MESI协议）</strong>：CPU缓存一致性协议，是Java内存模型的基础</li>
+                <li><strong>happens-before原则</strong>：JVM内存模型的核心理论，建立在硬件内存模型之上</li>
+                <li><strong>JVM内存屏障</strong>：基于happens-before原则实现，用于控制指令执行顺序</li>
+                <li><strong>Java应用底层机制</strong>：基于JVM内存屏障实现，包括synchronized、CAS和volatile</li>
+                <li><strong>Java应用中层的原子类和AQS</strong>：基于底层的CAS和volatile实现</li>
+                <li><strong>Java应用上层的ReentrantLock</strong>：基于AQS实现</li>
+                <li><strong>线程同步工具</strong>：基于AQS和ReentrantLock等机制实现</li>
+            </ul>
+            <p><strong>交互提示</strong>：将鼠标悬停在图上的任何元素上，可以查看其依赖关系。</p>
+        </div>
+    </div>
+
+    <script>
+        // 定义各层数据
+        const layers = [
+            {
+                name: "硬件层",
+                color: "#4a6fa5",
+                elements: [
+                    { id: "mesi", name: "MESI协议", desc: "CPU缓存一致性协议" }
+                ]
+            },
+            {
+                name: "原则/理论",
+                color: "#166088",
+                elements: [
+                    { id: "happens-before", name: "happens-before原则", desc: "JVM内存模型的核心理论" }
+                ]
+            },
+            {
+                name: "JVM层",
+                color: "#95b8d1",
+                elements: [
+                    { id: "memory-barrier", name: "内存屏障", desc: "LoadLoad, StoreStore, LoadStore, StoreLoad" }
+                ]
+            },
+            {
+                name: "Java应用底层",
+                color: "#4b8f8c",
+                elements: [
+                    { id: "synchronized", name: "synchronized锁", desc: "悲观锁机制，基于monitorenter/monitorexit" },
+                    { id: "cas", name: "CAS", desc: "乐观锁机制，Compare And Swap" },
+                    { id: "volatile", name: "volatile", desc: "保证可见性，禁止指令重排序" }
+                ]
+            },
+            {
+                name: "Java应用中层",
+                color: "#6a994e",
+                elements: [
+                    { id: "atomic-class", name: "原子类", desc: "AtomicInteger等，基于CAS实现" },
+                    { id: "aqs", name: "AQS", desc: "AbstractQueuedSynchronizer，同步器框架" }
+                ]
+            },
+            {
+                name: "Java应用上层",
+                color: "#bc4749",
+                elements: [
+                    { id: "reentrantlock", name: "ReentrantLock", desc: "Lock接口的实现，基于AQS" }
+                ]
+            },
+            {
+                name: "线程同步工具",
+                color: "#a98467",
+                elements: [
+                    { id: "countdownlatch", name: "CountDownLatch", desc: "基于AQS实现" },
+                    { id: "cyclicbarrier", name: "CyclicBarrier", desc: "基于ReentrantLock和Condition实现" },
+                    { id: "semaphore", name: "Semaphore", desc: "基于AQS实现" }
+                ]
+            }
+        ];
+        
+        // 定义依赖关系
+        const dependencies = [
+            // 硬件层 -> 原则/理论
+            { from: "happens-before", to: "mesi" },
+            
+            // 原则/理论 -> JVM层
+            { from: "memory-barrier", to: "happens-before" },
+            
+            // JVM层 -> Java应用底层
+            { from: "synchronized", to: "memory-barrier" },
+            { from: "cas", to: "memory-barrier" },
+            { from: "volatile", to: "memory-barrier" },
+            
+            // Java应用底层 -> Java应用中层
+            { from: "atomic-class", to: "cas" },
+            { from: "atomic-class", to: "volatile" },
+            { from: "aqs", to: "cas" },
+            { from: "aqs", to: "volatile" },
+            
+            // Java应用中层 -> Java应用上层
+            { from: "reentrantlock", to: "aqs" },
+            
+            // Java应用上层 -> 线程同步工具
+            { from: "countdownlatch", to: "aqs" },
+            { from: "cyclicbarrier", to: "reentrantlock" },
+            { from: "semaphore", to: "aqs" }
+        ];
+        
+        // 获取SVG容器
+        const svg = document.getElementById('dependencyGraph');
+        
+        // 创建箭头标记
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', 'arrowhead');
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '7');
+        marker.setAttribute('refX', '9');
+        marker.setAttribute('refY', '3.5');
+        marker.setAttribute('orient', 'auto');
+        
+        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+        polygon.setAttribute('fill', '#666');
+        
+        marker.appendChild(polygon);
+        defs.appendChild(marker);
+        svg.appendChild(defs);
+        
+        // 绘制依赖线
+        function drawDependencies() {
+            dependencies.forEach(dep => {
+                const fromElement = document.getElementById(dep.from);
+                const toElement = document.getElementById(dep.to);
+                
+                if (!fromElement || !toElement) return;
+                
+                const fromRect = fromElement.getBoundingClientRect();
+                const toRect = toElement.getBoundingClientRect();
+                const svgRect = svg.getBoundingClientRect();
+                
+                const fromX = fromRect.left + fromRect.width/2 - svgRect.left;
+                const fromY = fromRect.top + fromRect.height/2 - svgRect.top;
+                const toX = toRect.left + toRect.width/2 - svgRect.left;
+                const toY = toRect.top + toRect.height/2 - svgRect.top;
+                
+                // 创建贝塞尔曲线连接两个节点
+                const controlY = (fromY + toY) / 2;
+                
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', `M ${fromX} ${fromY} C ${fromX} ${controlY}, ${toX} ${controlY}, ${toX} ${toY}`);
+                path.setAttribute('class', 'dependency-line');
+                path.setAttribute('stroke', '#666');
+                path.setAttribute('data-from', dep.from);
+                path.setAttribute('data-to', dep.to);
+                
+                svg.appendChild(path);
+            });
+        }
+        
+        // 绘制图层和元素
+        function drawLayers() {
+            const layerHeight = 100;
+            const startY = 80;
+            
+            layers.forEach((layer, layerIndex) => {
+                // 绘制层标签
+                const layerLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                layerLabel.setAttribute('x', 100);
+                layerLabel.setAttribute('y', startY + layerIndex * layerHeight - 20);
+                layerLabel.setAttribute('class', 'layer-label');
+                layerLabel.textContent = layer.name;
+                svg.appendChild(layerLabel);
+                
+                // 绘制该层的所有元素
+                const elements = layer.elements;
+                const elementWidth = 160;
+                const elementHeight = 60;
+                const totalWidth = elements.length * elementWidth + (elements.length - 1) * 30;
+                const startX = (1100 - totalWidth) / 2;
+                
+                elements.forEach((element, elementIndex) => {
+                    const x = startX + elementIndex * (elementWidth + 30);
+                    const y = startY + layerIndex * layerHeight;
+                    
+                    // 创建矩形节点
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', x);
+                    rect.setAttribute('y', y);
+                    rect.setAttribute('width', elementWidth);
+                    rect.setAttribute('height', elementHeight);
+                    rect.setAttribute('rx', '8');
+                    rect.setAttribute('ry', '8');
+                    rect.setAttribute('fill', layer.color);
+                    rect.setAttribute('class', 'node');
+                    rect.setAttribute('id', element.id);
+                    rect.setAttribute('data-name', element.name);
+                    rect.setAttribute('data-desc', element.desc);
+                    rect.setAttribute('data-layer', layer.name);
+                    
+                    // 添加鼠标悬停效果
+                    rect.addEventListener('mouseenter', function(e) {
+                        highlightDependencies(element.id);
+                        showTooltip(e, element);
+                    });
+                    
+                    rect.addEventListener('mouseleave', function() {
+                        removeHighlight();
+                    });
+                    
+                    svg.appendChild(rect);
+                    
+                    // 添加元素名称
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', x + elementWidth/2);
+                    text.setAttribute('y', y + elementHeight/2);
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('fill', 'white');
+                    text.setAttribute('font-weight', 'bold');
+                    text.setAttribute('font-size', '14');
+                    
+                    // 如果名称太长，调整字体大小
+                    const name = element.name;
+                    const fontSize = name.length > 15 ? 12 : 14;
+                    text.setAttribute('font-size', fontSize);
+                    
+                    // 如果名称太长，分成两行显示
+                    if (name.length > 20) {
+                        const parts = splitText(name, 20);
+                        text.innerHTML = '';
+                        
+                        parts.forEach((part, i) => {
+                            const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                            tspan.setAttribute('x', x + elementWidth/2);
+                            tspan.setAttribute('dy', i === 0 ? '-0.3em' : '1.2em');
+                            tspan.textContent = part;
+                            text.appendChild(tspan);
+                        });
+                    } else {
+                        text.textContent = name;
+                    }
+                    
+                    svg.appendChild(text);
+                });
+            });
+            
+            // 绘制依赖线
+            drawDependencies();
+        }
+        
+        // 分割文本
+        function splitText(text, maxLength) {
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = words[0];
+            
+            for (let i = 1; i < words.length; i++) {
+                if (currentLine.length + words[i].length + 1 <= maxLength) {
+                    currentLine += ' ' + words[i];
+                } else {
+                    lines.push(currentLine);
+                    currentLine = words[i];
+                }
+            }
+            lines.push(currentLine);
+            return lines;
+        }
+        
+        // 高亮显示依赖关系
+        function highlightDependencies(elementId) {
+            // 高亮依赖此元素的线
+            document.querySelectorAll('.dependency-line').forEach(line => {
+                if (line.getAttribute('data-from') === elementId) {
+                    line.classList.add('highlight');
+                    line.setAttribute('stroke', '#e74c3c');
+                    
+                    // 高亮目标节点
+                    const targetId = line.getAttribute('data-to');
+                    const targetElement = document.getElementById(targetId);
+                    if (targetElement) {
+                        targetElement.style.filter = 'brightness(1.2)';
+                        targetElement.style.stroke = '#e74c3c';
+                        targetElement.style.strokeWidth = '3';
+                    }
+                }
+                
+                // 高亮依赖此元素的线（反向）
+                if (line.getAttribute('data-to') === elementId) {
+                    line.classList.add('highlight');
+                    line.setAttribute('stroke', '#3498db');
+                    
+                    // 高亮源节点
+                    const sourceId = line.getAttribute('data-from');
+                    const sourceElement = document.getElementById(sourceId);
+                    if (sourceElement) {
+                        sourceElement.style.filter = 'brightness(1.2)';
+                        sourceElement.style.stroke = '#3498db';
+                        sourceElement.style.strokeWidth = '3';
+                    }
+                }
+            });
+        }
+        
+        // 移除高亮
+        function removeHighlight() {
+            document.querySelectorAll('.dependency-line').forEach(line => {
+                line.classList.remove('highlight');
+                line.setAttribute('stroke', '#666');
+            });
+            
+            document.querySelectorAll('.node').forEach(node => {
+                node.style.filter = '';
+                node.style.stroke = 'none';
+                node.style.strokeWidth = '0';
+            });
+            
+            // 移除工具提示
+            const existingTooltip = document.querySelector('.tooltip');
+            if (existingTooltip) {
+                existingTooltip.remove();
+            }
+        }
+        
+        // 显示工具提示
+        function showTooltip(event, element) {
+            // 移除现有的工具提示
+            const existingTooltip = document.querySelector('.tooltip');
+            if (existingTooltip) {
+                existingTooltip.remove();
+            }
+            
+            // 创建工具提示
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.innerHTML = `
+                <h4>${element.name}</h4>
+                <p><strong>描述:</strong> ${element.desc}</p>
+                <p><strong>所属层级:</strong> ${event.target.getAttribute('data-layer')}</p>
+                <p><strong>依赖关系:</strong></p>
+                <ul>
+                    ${getDependencyInfo(element.id)}
+                </ul>
+            `;
+            
+            // 样式
+            tooltip.style.position = 'absolute';
+            tooltip.style.background = 'white';
+            tooltip.style.border = '1px solid #ddd';
+            tooltip.style.borderRadius = '8px';
+            tooltip.style.padding = '15px';
+            tooltip.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+            tooltip.style.zIndex = '1000';
+            tooltip.style.maxWidth = '300px';
+            tooltip.style.pointerEvents = 'none';
+            
+            // 定位
+            const x = event.clientX + 20;
+            const y = event.clientY + 20;
+            tooltip.style.left = `${x}px`;
+            tooltip.style.top = `${y}px`;
+            
+            document.body.appendChild(tooltip);
+        }
+        
+        // 获取依赖关系信息
+        function getDependencyInfo(elementId) {
+            let html = '';
+            
+            // 查找依赖此元素的组件
+            const dependentOn = dependencies.filter(dep => dep.to === elementId)
+                .map(dep => `<li>被 <strong>${getName(dep.from)}</strong> 依赖</li>`).join('');
+            
+            if (dependentOn) {
+                html += dependentOn;
+            }
+            
+            // 查找此元素依赖的组件
+            const dependsOn = dependencies.filter(dep => dep.from === elementId)
+                .map(dep => `<li>依赖于 <strong>${getName(dep.to)}</strong></li>`).join('');
+            
+            if (dependsOn) {
+                html += dependsOn;
+            }
+            
+            if (!dependentOn && !dependsOn) {
+                html = '<li>无依赖关系</li>';
+            }
+            
+            return html;
+        }
+        
+        // 根据ID获取元素名称
+        function getName(id) {
+            for (const layer of layers) {
+                for (const element of layer.elements) {
+                    if (element.id === id) {
+                        return element.name;
+                    }
+                }
+            }
+            return id;
+        }
+        
+        // 初始绘制
+        drawLayers();
+        
+        // 调整SVG大小以适应内容
+        window.addEventListener('load', function() {
+            const svgRect = svg.getBoundingClientRect();
+            const lastLayer = layers[layers.length - 1];
+            const estimatedHeight = 80 + layers.length * 100 + 60;
+            
+            if (estimatedHeight > svgRect.height) {
+                svg.setAttribute('height', estimatedHeight);
+            }
+        });
+    </script>
+</body>
+</html>
